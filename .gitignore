@@ -1,0 +1,8 @@
+# API Keys and Configuration
+config.py
+*.env
+.env
+
+# Byte-compiled files
+__pycache__/
+*.pyc
