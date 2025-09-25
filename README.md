@@ -28,6 +28,20 @@ It is suggested to use a remote virtual environment for environment configuratio
    "smolagents[telemetry]" # Add support for monitoring and tracing
    ```
 
+## Requirements
+```
+smolagents>=1.0.0
+openai>=1.40.0
+pyautogui>=0.9.54
+pillow>=10.0.0
+pyscreeze>=0.1.30
+mss>=9.0.1
+pygetwindow>=0.0.9
+mouseinfo>=0.1.3
+python-dotenv>=1.0.1
+helium>=3.0.0
+```
+
 ## AgentArchitecture
 
 The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle).
