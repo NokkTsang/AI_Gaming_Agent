@@ -4,9 +4,12 @@ The project aims to apply a comprehensive AI gaming agent framework built on top
 
 ## Technology Stack
 
-**Core Framework**: [SmolAgents](https://github.com/huggingface/smolagents)
+- [SmolAgents](https://github.com/huggingface/smolagents): A lightweight framework for building AI agents.
+- [Cradle](https://github.com/BAAI-Agents/Cradle): A framework which attempts at General Computer Control (GCC).
 
 ## Architecture
+
+The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle).
 
 ```mermaid
 ---
