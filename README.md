@@ -69,6 +69,7 @@ flowchart TB
 ## Code Structure
 
 ```mermaid
+---
 config:
   layout: dagre
 ---
