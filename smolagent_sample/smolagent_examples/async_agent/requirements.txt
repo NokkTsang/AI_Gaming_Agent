@@ -1,4 +1,0 @@
-smolagents
-starlette
-anyio
-uvicorn
