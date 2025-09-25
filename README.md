@@ -73,7 +73,7 @@ flowchart TB
 config:
   layout: dagre
 ---
- flowchat TB
+ flowchart TB
  A["To be continue"]
 ```
 
