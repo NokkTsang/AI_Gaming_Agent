@@ -52,8 +52,8 @@ It is suggested to use a remote virtual environment for environment configuratio
 1. Please install a virtual environment.
 
    ```
-   python3 -m venv .venv
-   source .venv/bin/activate
+   python3 -m venv .venv # Name it as .venv
+   source .venv/bin/activate # Activate .venv
    ```
 
 2. Install necessary libraries.
