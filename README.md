@@ -74,7 +74,7 @@ config:
   layout: dagre
 ---
  flowchat TB
- A[To be continue]
+ A["To be continue"]
 ```
 
 ## License
