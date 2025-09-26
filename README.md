@@ -23,6 +23,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    pip install -r requirements.txt
    ```
 
+
 ## AgentArchitecture
 
 The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle).
