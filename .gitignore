@@ -2,6 +2,7 @@
 config.py
 *.env
 .env
+*.venv
 
 # Byte-compiled files
 __pycache__/
