@@ -20,12 +20,7 @@ It is suggested to use a remote virtual environment for environment configuratio
 
 2. Install necessary libraries.
    ```
-   pip install smolagent
-   “smolagent[toolkit]” # For basic tasks
-   “smolagents[openai]” # For OpenAI API
-   "smolagents[vision]" # For computer vision tasks
-   "smolagents[docker]" # To execute code in a sandbox environment for security
-   "smolagents[telemetry]" # Add support for monitoring and tracing
+   pip install -r requirements.txt
    ```
 
 ## AgentArchitecture
