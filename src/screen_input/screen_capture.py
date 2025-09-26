@@ -54,10 +54,11 @@ def take_screenshot(
     image.save(screen_image_filename, "JPEG")
 
     if crop_border:
-        # Placeholder: implement your border cropping here
+        # Implement border cropping here
         pass
 
     return screen_image_filename
+
 
 if __name__ == "__main__":
     screenshot_path = take_screenshot(
