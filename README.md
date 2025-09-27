@@ -19,10 +19,15 @@ It is suggested to use a remote virtual environment for environment configuratio
    ```
 
 2. Install necessary libraries.
+
    ```
    pip install -r requirements.txt
    ```
 
+3. Create a `.env` file for storing api key
+   ```
+   echo 'OPENAI_API_KEY=your-api-key-here' > .env
+   ```
 
 ## AgentArchitecture
 
