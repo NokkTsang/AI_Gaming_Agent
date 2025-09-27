@@ -4,7 +4,7 @@ import mss
 from PIL import Image, ImageDraw, ImageFont
 
 # You may want to load these from your config system
-DEFAULT_OUTPUT_DIR = "./screenshots"
+DEFAULT_OUTPUT_DIR = "src/modules/screen_input/screenshots"
 FULLSCREEN = None
 
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     screenshot_path = take_screenshot(
         tid=None,
         screen_region=FULLSCREEN,  # Or specify a custom region in list format [left, top, width, h
-        output_dir="./screenshots",
+        output_dir=DEFAULT_OUTPUT_DIR,
         draw_axis=False,
         crop_border=False,
     )

@@ -1,5 +1,6 @@
 smolagents>=1.0.0
 smolagents[toolkit]  # For basic tasks
+smolagents[litellm]  # For using LiteLLM models
 smolagents[openai]   # For OpenAI API
 smolagents[vision]   # For computer vision tasks
 smolagents[docker]   # To execute code in a sandbox environment for security
