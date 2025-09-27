@@ -4,13 +4,20 @@ import mss
 from PIL import Image, ImageDraw, ImageFont
 
 # You may want to load these from your config system
-DEFAULT_REGION = (0, 0, 1920, 1080)  # left, top, width, height
 DEFAULT_OUTPUT_DIR = "./screenshots"
+FULLSCREEN = None
+
+
+def get_fullscreen_region() -> Tuple[int, int, int, int]:
+    """Detects and returns the region for the primary monitor (full screen)."""
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]  # 1 is the primary monitor
+        return (monitor["left"], monitor["top"], monitor["width"], monitor["height"])
 
 
 def take_screenshot(
     tid: Optional[float] = None,
-    screen_region: Optional[Tuple[int, int, int, int]] = None,
+    screen_region: Optional[Tuple[int, int, int, int]] = FULLSCREEN,
     output_dir: str = DEFAULT_OUTPUT_DIR,
     draw_axis: bool = False,
     crop_border: bool = False,
@@ -24,8 +31,8 @@ def take_screenshot(
 
     if tid is None:
         tid = time.time()
-    if screen_region is None:
-        screen_region = DEFAULT_REGION
+    if screen_region is FULLSCREEN:
+        screen_region = get_fullscreen_region()
 
     region = {
         "left": screen_region[0],
@@ -63,9 +70,9 @@ def take_screenshot(
 if __name__ == "__main__":
     screenshot_path = take_screenshot(
         tid=None,
-        screen_region=(0, 0, 800, 600),
+        screen_region=FULLSCREEN,  # Or specify a custom region in list format [left, top, width, h
         output_dir="./screenshots",
-        draw_axis=True,
+        draw_axis=False,
         crop_border=False,
     )
     print(f"Screenshot saved to {screenshot_path}")
