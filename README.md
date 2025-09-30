@@ -29,7 +29,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    echo 'OPENAI_API_KEY=your-api-key-here' > .env
    ```
 
-## AgentArchitecture
+## Agent Architecture
 
 The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle).
 
