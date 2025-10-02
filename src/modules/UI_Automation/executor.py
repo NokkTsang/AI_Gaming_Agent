@@ -27,7 +27,7 @@ KEY_MAP = {
 
 class ActionExecutor:
     """
-    Execute generic UI action dictionaries with UIAutomator.
+    Execute generic UI action dictionaries with UIAutomator (automator.py).
 
     Expected action dict shape (canonical):
     {
@@ -45,7 +45,12 @@ class ActionExecutor:
     the generic structure above regardless of the upstream source.
     """
 
-    def __init__(self, screen_width: int, screen_height: int, automator: UIAutomator | None = None) -> None:
+    def __init__(
+        self,
+        screen_width: int,
+        screen_height: int,
+        automator: UIAutomator | None = None,
+    ) -> None:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.automator = automator or UIAutomator()
@@ -74,7 +79,13 @@ class ActionExecutor:
         action_type = action.get("action_type")
         inputs = action.get("action_inputs", {})
 
-        if action_type in {"click", "left_single", "hover", "left_double", "right_single"}:
+        if action_type in {
+            "click",
+            "left_single",
+            "hover",
+            "left_double",
+            "right_single",
+        }:
             start_box = inputs.get("start_box")
             if start_box:
                 box = self._coerce_box(start_box)
