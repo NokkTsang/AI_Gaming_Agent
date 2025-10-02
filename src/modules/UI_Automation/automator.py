@@ -3,6 +3,16 @@ from typing import Optional, Tuple, Dict, Any
 
 import pyautogui
 
+"""
+Fundamental atomic keyboard/mouse actions:
+    - left click
+    - right click
+    - double click
+    - move mouse
+    - scroll wheel
+    - press key
+"""
+
 
 class UIAutomator:
     """
@@ -19,7 +29,14 @@ class UIAutomator:
     def move_to(self, x: float, y: float, duration: float = 0.0) -> None:
         pyautogui.moveTo(x, y, duration=duration)
 
-    def click(self, x: float, y: float, button: str = "left", clicks: int = 1, interval: float = 0.1) -> None:
+    def click(
+        self,
+        x: float,
+        y: float,
+        button: str = "left",
+        clicks: int = 1,
+        interval: float = 0.1,
+    ) -> None:
         pyautogui.click(x, y, button=button, clicks=clicks, interval=interval)
 
     def double_click(self, x: float, y: float, button: str = "left") -> None:
@@ -28,7 +45,9 @@ class UIAutomator:
     def right_click(self, x: float, y: float) -> None:
         pyautogui.click(x, y, button="right")
 
-    def drag_to(self, x: float, y: float, duration: float = 0.3, button: str = "left") -> None:
+    def drag_to(
+        self, x: float, y: float, duration: float = 0.3, button: str = "left"
+    ) -> None:
         pyautogui.dragTo(x, y, duration=duration, button=button)
 
     # ---- Keyboard ----
@@ -45,7 +64,9 @@ class UIAutomator:
         pyautogui.write(text, interval=interval)
 
     # ---- Scroll ----
-    def scroll(self, clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> None:
+    def scroll(
+        self, clicks: int, x: Optional[int] = None, y: Optional[int] = None
+    ) -> None:
         if x is None or y is None:
             pyautogui.scroll(clicks)
         else:
