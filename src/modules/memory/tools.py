@@ -6,7 +6,7 @@ import os
 import pyautogui
 from smolagents import tool
 
-from .automator import UIAutomator
+from ..ui_automation.automator import UIAutomator
 
 
 _AUTOMATOR = UIAutomator()
@@ -89,7 +89,9 @@ def move_to_box(box: List[float], duration: float = 0.0) -> str:
 
 
 @tool
-def drag_box(start_box: List[float], end_box: List[float], duration: float = 0.3) -> str:
+def drag_box(
+    start_box: List[float], end_box: List[float], duration: float = 0.3
+) -> str:
     """Drag from the center of start_box to the center of end_box (normalized).
 
     Args:
@@ -190,7 +192,9 @@ try:
 
         Returns a status string; if not found, returns 'not found'.
         """
-        windows = [w for w in gw.getAllWindows() if title_substring.lower() in w.title.lower()]
+        windows = [
+            w for w in gw.getAllWindows() if title_substring.lower() in w.title.lower()
+        ]
         if not windows:
             return "not found"
         w = windows[0]
@@ -198,6 +202,7 @@ try:
             w.restore()
         w.activate()
         return f"focused: {w.title}"
+
 except Exception:
     # Optional dependency not available; tool won't be registered
     pass
