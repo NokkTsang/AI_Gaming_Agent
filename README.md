@@ -1,4 +1,4 @@
-# AI Gaming Agent 🎮
+# AI Gaming Agent 🤖 + 🎮
 
 The project aims to apply a comprehensive AI gaming agent framework built on top of **smolagents** to create intelligent agents capable of playing and mastering various types of games, from simple board games to complex universal gaming environments.
 
