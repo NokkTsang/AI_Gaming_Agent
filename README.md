@@ -74,8 +74,62 @@ flowchart TB
 config:
   layout: dagre
 ---
- flowchart TB
- A["To be continue"]
+flowchart TB
+    subgraph Input["Data Input"]
+        A[Screen Capture]
+        B[Info Gathering<br/>Vision LLM]
+        B2[Object Detector<br/>placeholder]
+    end
+
+    subgraph Memory["Memory System"]
+        C1[Short-term Memory<br/>short_term.py<br/>short_term_state.json]
+        C2[Long-term Skills<br/>long_term.py<br/>skills.json]
+        C3[Skill Retrieval<br/>skill_retrieval.py<br/>skill_embeddings.npy]
+    end
+
+    subgraph Reasoning["Agent Modules"]
+        D[Self-Reflection<br/>reflector.py<br/>LLM judges success/failure]
+        E[Task Inference<br/>task_breaker.py<br/>Decompose to subtasks]
+        F[Skill Curation<br/>skill_manager.py<br/>Extract and save skills]
+        G[Action Planning<br/>planner.py<br/>CodeAgent + Tools + Skills]
+    end
+
+    subgraph Output["Execution"]
+        H1[Atomic Actions<br/>atomic_actions.py<br/>Low-level primitives]
+        H2[Tools<br/>tools.py<br/>Validated @tool wrappers]
+        I[Environment]
+    end
+
+    A -->|screenshot| B
+    B2 -.->|annotate| B
+    B -->|observation| C1
+
+    C1 -->|state| D
+    C1 -->|task| E
+
+    E -->|subtasks| C1
+    E -->|current subtask| G
+
+    G -->|query subtask| C3
+    C3 -->|vector search| C2
+    C2 -->|top-3 skill codes| G
+
+    D -->|before/after obs| B
+    D -->|if failed| E
+    D -->|if success pattern| F
+
+    F -->|save new skill| C2
+    F -->|update vectors| C3
+
+    G -->|CodeAgent calls| H2
+    H2 -->|calls| H1
+    H1 -->|execute| I
+    I -->|screen changes| A
+
+    style Input fill:#FFE0B2
+    style Memory fill:#B3E5FC
+    style Reasoning fill:#C8E6C9
+    style Output fill:#F8BBD0
 ```
 
 ## License
@@ -85,3 +139,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - **Hugging Face** for the amazing smolagents framework
+
+## Log
+
+- \*\*Comments: 防止 noise?
+  長期記憶：遊戲經驗、條件反射？

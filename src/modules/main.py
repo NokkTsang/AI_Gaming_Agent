@@ -44,7 +44,7 @@ class SimpleAgent:
             automator=self.automator,
         )
         self.planner = ActionPlanner(
-            model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY")
+            model="gpt-4.1-nano", api_key=os.getenv("OPENAI_API_KEY")
         )
 
     def update_screen_size(self):
@@ -57,9 +57,9 @@ class SimpleAgent:
 
     def run(self):
         """Execute the agent loop."""
-        print(f"🤖 Starting Agent")
-        print(f"📋 Task: {self.task}")
-        print(f"🔄 Max steps: {self.max_steps}\n")
+        print(f"Starting Agent")
+        print(f"Task: {self.task}")
+        print(f"Max steps: {self.max_steps}\n")
 
         self.update_screen_size()
 
@@ -69,12 +69,12 @@ class SimpleAgent:
             print(f"{'='*60}\n")
 
             # 1. Screen Input - Capture screenshot
-            print("📸 Capturing screenshot...")
+            print("Capturing screenshot...")
             screenshot_path = take_screenshot()
             print(f"   Saved to: {screenshot_path}")
 
             # 2. Information Gathering - Analyze screen
-            print("\n🔍 Analyzing screen...")
+            print("\nAnalyzing screen...")
             observation_prompt = (
                 f"Current task: {self.task}\n"
                 f"Action history: {self._format_history()}\n\n"
@@ -86,7 +86,7 @@ class SimpleAgent:
             self.observation_history.append(observation)
 
             # 3. Action Planning - Decide next action
-            print("\n🧠 Planning next action...")
+            print("\nPlanning next action...")
             action_dict = self.planner.plan_next_action(
                 task=self.task,
                 observation=observation,
@@ -94,7 +94,7 @@ class SimpleAgent:
             )
 
             if action_dict is None:
-                print("   ❌ Failed to generate action. Stopping.")
+                print("    Failed to generate action. Stopping.")
                 break
 
             print(f"   Action: {action_dict['action_type']}")
@@ -102,7 +102,7 @@ class SimpleAgent:
 
             # Check if task is complete
             if action_dict["action_type"] == "finished":
-                print("\n✅ Task completed!")
+                print("\nTask completed!")
                 print(
                     f"   Final message: {action_dict['action_inputs'].get('content', 'Done')}"
                 )
@@ -139,8 +139,6 @@ class SimpleAgent:
 
 
 def main():
-    """Main entry point."""
-    # Example task: Search Google for "openai"
     task = "Open a web browser, go to Google, and search for 'openai'"
 
     agent = SimpleAgent(task=task, max_steps=10)

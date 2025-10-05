@@ -11,7 +11,7 @@ from openai import OpenAI
 class ActionPlanner:
     """Plans actions using a vision-capable LLM based on task and screen observations."""
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: str = None):
+    def __init__(self, model: str = "gpt-4.1-nano", api_key: str = None):
         self.model = model
         self.client = OpenAI(api_key=api_key)
         self.system_prompt = self._build_system_prompt()
