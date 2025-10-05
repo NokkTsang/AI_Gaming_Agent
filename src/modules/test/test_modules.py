@@ -1,13 +1,13 @@
 """
 Simple test to verify all modules can be imported and basic functionality works.
-Run from project root: python -m src.modules.test_modules
+Run from project root: python -m src.modules.test.test_modules
 """
 
 import sys
 from pathlib import Path
 
-# Add src directory to path so we can import from src.modules
-repo_root = Path(__file__).parent.parent.parent
+# Add src directory to path
+repo_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(repo_root / "src"))
 
 
@@ -40,7 +40,7 @@ def test_imports():
         return False
 
     try:
-        from modules.ui_automation.automator import UIAutomator
+        from modules.ui_automation.atomic_actions import UIAutomator
         from modules.ui_automation.executor import ActionExecutor
 
         print("✓ ui_automation imported")
@@ -69,7 +69,7 @@ def test_action_parser():
     """Test action parsing."""
     print("\nTesting action execution...")
     from modules.ui_automation.executor import ActionExecutor
-    from modules.ui_automation.automator import UIAutomator
+    from modules.ui_automation.atomic_actions import UIAutomator
 
     try:
         automator = UIAutomator()

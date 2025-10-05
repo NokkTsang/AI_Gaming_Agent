@@ -11,13 +11,13 @@ from openai import OpenAI
 class ActionPlanner:
     """Plans actions using a vision-capable LLM based on task and screen observations."""
 
-    def __init__(self, model: str = "gpt-4.1-nano", api_key: str = None):
+    def __init__(self, model: str = "gpt-4o-mini", api_key: str = None):
         self.model = model
         self.client = OpenAI(api_key=api_key)
         self.system_prompt = self._build_system_prompt()
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt that defines the agent's action space."""
+        """Build the system prompt that defines the agent\'s action space."""
         return """You are a GUI automation agent. Given a task and screen observation, you decide the next action.
 
 ## Available Actions
@@ -55,7 +55,7 @@ Return ONLY a valid JSON object:
 **Example 1: Click address bar**
 ```json
 {
-  "thought": "I need to open a browser first. I'll click on the Chrome icon in the taskbar.",
+  "thought": "I need to open a browser first. I\'ll click on the Chrome icon in the taskbar.",
   "action_type": "click",
   "action_inputs": {"start_box": [0.5, 0.95]}
 }
@@ -64,7 +64,7 @@ Return ONLY a valid JSON object:
 **Example 2: Type in search**
 ```json
 {
-  "thought": "The search box is visible. I'll type the search query.",
+  "thought": "The search box is visible. I\'ll type the search query.",
   "action_type": "type",
   "action_inputs": {"content": "openai\\n"}
 }
@@ -73,7 +73,7 @@ Return ONLY a valid JSON object:
 **Example 3: Open browser with hotkey**
 ```json
 {
-  "thought": "I'll use Cmd+Space to open Spotlight and launch a browser.",
+  "thought": "I\'ll use Cmd+Space to open Spotlight and launch a browser.",
   "action_type": "hotkey",
   "action_inputs": {"key": "cmd space"}
 }
@@ -82,7 +82,7 @@ Return ONLY a valid JSON object:
 **Example 4: Task complete**
 ```json
 {
-  "thought": "The search results for 'openai' are now displayed. Task complete.",
+  "thought": "The search results for \'openai\' are now displayed. Task complete.",
   "action_type": "finished",
   "action_inputs": {"content": "Successfully searched for openai on Google"}
 }
@@ -93,7 +93,7 @@ Return ONLY a valid JSON object:
 2. Only use actions from the list above
 3. Coordinates must be in [0, 1] range
 4. Return valid JSON only (no markdown, no extra text)
-5. Be specific about which UI element you're targeting
+5. Be specific about which UI element you\'re targeting
 """
 
     def plan_next_action(
@@ -108,7 +108,7 @@ Return ONLY a valid JSON object:
             action_history: List of previous actions taken
 
         Returns:
-            Action dictionary with 'action_type' and 'action_inputs', or None if failed
+            Action dictionary with \'action_type\' and \'action_inputs\', or None if failed
         """
         # Format action history for context
         history_str = self._format_history(action_history)
@@ -143,12 +143,12 @@ Based on the current screen and task, what should be the next action? Return JSO
                 return action_dict
             else:
                 print(
-                    f"   ⚠️ Failed to parse action from response: {response_text[:200]}"
+                    f"   Warning: Failed to parse action from response: {response_text[:200]}"
                 )
                 return None
 
         except Exception as e:
-            print(f"   ❌ Error planning action: {e}")
+            print(f"   Error planning action: {e}")
             return None
 
     def _parse_response(self, response_text: str) -> Optional[Dict[str, Any]]:
@@ -172,7 +172,7 @@ Based on the current screen and task, what should be the next action? Return JSO
             return data
 
         except json.JSONDecodeError as e:
-            print(f"   ⚠️ JSON decode error: {e}")
+            print(f"   Warning: JSON decode error: {e}")
             return None
 
     def _format_history(self, action_history: List[Dict[str, Any]]) -> str:

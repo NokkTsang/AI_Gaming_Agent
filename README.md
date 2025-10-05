@@ -25,8 +25,46 @@ It is suggested to use a remote virtual environment for environment configuratio
    ```
 
 3. Create a `.env` file for storing api key
+
    ```
-   echo 'OPENAI_API_KEY=your-api-key-here' > .env
+   echo 'OPENAI_API_KEY=your-api-key' > .env
+   ```
+
+   Or export as environment variable:
+
+   ```
+   export OPENAI_API_KEY='your-api-key'
+   ```
+
+4. Running Tests
+   Without LLM (basic module tests):
+
+   ```
+   python -m src.modules.test.test_without_llm
+   ```
+
+   With LLM (requires API key):
+
+   ```
+   python -m src.modules.test.test_modules
+   ```
+
+5. Usage
+
+   ```
+   python -m src.modules.main
+   ```
+
+   Or with a custom task:
+
+   ```
+   python -m src.modules.main "Open Chrome and search for OpenAI"
+   ```
+
+6. Reset memory
+   ```
+   rm src/modules/memory/data/*.json
+   rm src/modules/memory/data/*.npy
    ```
 
 ## Agent Architecture
@@ -43,7 +81,6 @@ flowchart TB
         A["Screen Input"]
         B["Information<br>Gathering"]
         H["UI Automation"]
-        I["Keyboard | Mouse<br>Output"]
         J["Computer Environment"]
   end
  subgraph s2["**Agent Modules**"]
@@ -60,8 +97,7 @@ flowchart TB
     E --> F
     F --> G
     G --> H
-    H --> I
-    I --> J
+    H --> J
     J --> A
     style s1 fill:#FFE0B2
     style s2 fill:#C8E6C9
@@ -140,7 +176,33 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Hugging Face** for the amazing smolagents framework
 
-## Log
+## Development Log
 
-- \*\*Comments: 防止 noise?
-  長期記憶：遊戲經驗、條件反射？
+### 5/10/2025
+
+- Added action_planning module
+- Added self_reflection module
+- Added skill_curation module
+- Added task_inference module
+- Added test module
+- Performance not optimal, should optimize it
+
+### 2/10/2025
+
+- Added ui_automation module
+- Added screen_input module
+- Added information_gathering module
+- Added memory module
+
+### 27/9/2025
+
+- Created modules folder
+- Designed developing process
+
+### 23/9/2025
+
+- Added demo and reference from ByteDance Tars
+
+### 18/9/2025
+
+- Initialized project

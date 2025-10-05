@@ -6,7 +6,7 @@ import os
 import pyautogui
 from smolagents import tool
 
-from ..ui_automation.automator import UIAutomator
+from ..ui_automation.atomic_actions import UIAutomator
 
 
 _AUTOMATOR = UIAutomator()
@@ -89,6 +89,32 @@ def move_to_box(box: List[float], duration: float = 0.0) -> str:
 
 
 @tool
+def right_click_box(box: List[float]) -> str:
+    """Right-click the center of a normalized box on screen.
+
+    Args:
+        box: [x1, y1, x2, y2] or [x, y], values in [0,1] relative to screen.
+    Returns: a short status string.
+    """
+    return click_box(box, button="right")
+
+
+@tool
+def double_click_box(box: List[float]) -> str:
+    """Double-click the center of a normalized box on screen.
+
+    Args:
+        box: [x1, y1, x2, y2] or [x, y], values in [0,1] relative to screen.
+    Returns: a short status string.
+    """
+    box = _validate_box(list(box), name="box")
+    cx, cy = _center_of_box(list(box))
+    x, y = _denorm(cx, cy)
+    _AUTOMATOR.click(x, y, button="left", clicks=2)
+    return f"double-clicked at ({int(x)}, {int(y)})"
+
+
+@tool
 def drag_box(
     start_box: List[float], end_box: List[float], duration: float = 0.3
 ) -> str:
@@ -136,7 +162,12 @@ def scroll(direction: str, clicks: int = 5, box: Optional[List[float]] = None) -
 def hotkey(combo: str) -> str:
     """Press a hotkey combo separated by spaces, e.g. 'ctrl c' or 'alt tab'.
 
-    Recognizes arrowleft/arrowright/arrowup/arrowdown and maps to left/right/up/down.
+    Args:
+        combo: Space-separated key combination (e.g., 'ctrl c', 'alt tab').
+               Recognizes arrowleft/arrowright/arrowup/arrowdown and maps to left/right/up/down.
+
+    Returns:
+        Status message indicating which keys were pressed.
     """
     KEY_MAP = {
         "arrowleft": "left",
@@ -158,8 +189,36 @@ def hotkey(combo: str) -> str:
 
 
 @tool
+def press_key(key: str) -> str:
+    """Press a single key on the keyboard.
+
+    Args:
+        key: Key name (e.g., 'enter', 'esc', 'tab', 'backspace', 'delete',
+             'a', 'space', 'left', 'right', 'up', 'down', 'f1', etc.)
+    Returns: a short status string.
+    """
+    KEY_MAP = {
+        "arrowleft": "left",
+        "arrowright": "right",
+        "arrowup": "up",
+        "arrowdown": "down",
+        "space": " ",
+    }
+    key = KEY_MAP.get(key.lower(), key)
+    _AUTOMATOR.hotkey(key)
+    return f"pressed: {key}"
+
+
+@tool
 def type_text(text: str) -> str:
-    """Type plain text as keyboard input. Use '\\n' to represent Enter if needed."""
+    """Type plain text as keyboard input. Use '\\n' to represent Enter if needed.
+
+    Args:
+        text: The text to type. Append '\\n' at the end to press Enter after typing.
+
+    Returns:
+        Status message.
+    """
     # Enforce a maximum length for safety
     submit = False
     if text.endswith("\\n") or text.endswith("\n"):
@@ -175,7 +234,14 @@ def type_text(text: str) -> str:
 
 @tool
 def wait(seconds: float = 1.0) -> str:
-    """Sleep for a number of seconds."""
+    """Sleep for a number of seconds.
+
+    Args:
+        seconds: Number of seconds to wait (maximum enforced by policy).
+
+    Returns:
+        Status message.
+    """
     sec = max(0.0, float(seconds))
     if sec > POLICY_MAX_WAIT_SECONDS:
         sec = POLICY_MAX_WAIT_SECONDS
@@ -190,7 +256,11 @@ try:
     def focus_window(title_substring: str) -> str:
         """Bring the first window whose title contains the substring to the foreground.
 
-        Returns a status string; if not found, returns 'not found'.
+        Args:
+            title_substring: Partial window title to search for (case-insensitive).
+
+        Returns:
+            Status string indicating success or 'not found' if window not found.
         """
         windows = [
             w for w in gw.getAllWindows() if title_substring.lower() in w.title.lower()

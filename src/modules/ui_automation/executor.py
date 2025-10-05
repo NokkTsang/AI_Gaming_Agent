@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from typing import Dict, Any, List, Tuple
 
-from .automator import UIAutomator
+from .atomic_actions import UIAutomator
 
 
 def _center_of_box(box: List[float]) -> Tuple[float, float]:
