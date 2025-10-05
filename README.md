@@ -69,7 +69,7 @@ It is suggested to use a remote virtual environment for environment configuratio
 
 ## Agent Architecture
 
-The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle).
+The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle). Please read [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
 ```mermaid
 ---
