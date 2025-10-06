@@ -77,18 +77,22 @@ config:
   layout: dagre
 ---
 flowchart TB
- subgraph s1["**Data Flow**"]
+ subgraph s1["**Data Input**"]
         A["Screen Input"]
         B["Information<br>Gathering"]
-        H["UI Automation"]
-        J["Computer Environment"]
   end
- subgraph s2["**Agent Modules**"]
-        C["Memory"]
+ subgraph s2["**Agent Thinking**"]
         D["Self-Reflection"]
         E["Task Inference"]
         F["Skill Curation"]
         G["Action Planning"]
+  end
+ subgraph s3["**UI Execution**"]
+        H["UI Automation"]
+        J["Computer Environment"]
+  end
+ subgraph s4["**Memory System**"]
+        C["Memory"]
   end
     A --> B
     B --> C
@@ -101,6 +105,9 @@ flowchart TB
     J --> A
     style s1 fill:#FFE0B2
     style s2 fill:#C8E6C9
+    style s3 fill:#FFCDD2
+    style s4 fill:#E1BEE7
+
 ```
 
 ## Code Structure
@@ -111,25 +118,25 @@ config:
   layout: dagre
 ---
 flowchart TB
-    subgraph Input["Data Input"]
+    subgraph Input["**Data Input**"]
         A[Screen Capture]
         B[Info Gathering<br/>Vision LLM]
     end
 
-    subgraph Memory["Memory System"]
+    subgraph Memory["**Memory System**"]
         C1[Short-term Memory<br/>short_term.py<br/>short_term_state.json]
         C2[Long-term Skills<br/>long_term.py<br/>skills.json]
         C3[Skill Retrieval<br/>skill_retrieval.py<br/>skill_embeddings.npy]
     end
 
-    subgraph Reasoning["Agent Thinking"]
+    subgraph Reasoning["**Agent Thinking**"]
         D[Self-Reflection<br/>reflector.py<br/>LLM judges success/failure]
         E[Task Inference<br/>task_breaker.py<br/>Decompose to subtasks]
         F[Skill Curation<br/>skill_manager.py<br/>Extract and save skills]
         G[Action Planning<br/>planner.py<br/>CodeAgent + Tools + Skills]
     end
 
-    subgraph Output["UI Execution"]
+    subgraph Output["**UI Execution**"]
         H1[Atomic Actions<br/>atomic_actions.py<br/>Low-level primitives]
         H2[Tools<br/>tools.py<br/>Validated @tool wrappers]
         I[Environment]
