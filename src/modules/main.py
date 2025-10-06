@@ -337,12 +337,12 @@ def main():
     # ============================================================
     # CONFIGURATION: Edit these values to customize the agent
     # ============================================================
-    MODEL = "gpt-4.1"
+    MODEL = "gpt-4.1-nano"
     MAX_STEPS = 50
     # ============================================================
 
     print(f"Using model: {MODEL}")
-    print(f"Max steps per task: {MAX_STEPS}")
+    print(f"Max steps per task: {MAX_STEPS}\n")
 
     agent = AIGamingAgent(max_steps=MAX_STEPS, model=MODEL)
     agent.run(task)

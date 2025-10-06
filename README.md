@@ -193,6 +193,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Added task_inference module
 - Added test module
 - Performance not optimal, should optimize it
+  - llm cannot compare contextual semantic screenshots, that is, it can not directly notice the change in screenshots
+  - llm can struggles on one page for a long time
+  - does the atomic actions work on multiple operating systems (MacOS, Windows, Linux)?
 
 ### 2/10/2025
 
