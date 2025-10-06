@@ -138,7 +138,8 @@ flowchart TB
 
     subgraph Output["**UI Execution**"]
         H1[Atomic Actions<br/>atomic_actions.py<br/>Low-level primitives]
-        H2[Tools<br/>tools.py<br/>Validated @tool wrappers]
+        H2[Action Executor<br/>executor.py<br/>Executes planned actions]
+        H3[Tools<br/>tools.py<br/>Validated @tool wrappers]
         I[Environment]
     end
 
@@ -162,8 +163,9 @@ flowchart TB
     F -->|save new skill| C2
     F -->|update vectors| C3
 
-    G -->|CodeAgent calls| H2
-    H2 -->|calls| H1
+    G -->|action dict| H2
+    H2 -->|execute action| H3
+    H3 -->|calls| H1
     H1 -->|execute| I
     I -->|screen changes| A
 
