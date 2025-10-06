@@ -122,14 +122,14 @@ flowchart TB
         C3[Skill Retrieval<br/>skill_retrieval.py<br/>skill_embeddings.npy]
     end
 
-    subgraph Reasoning["Agent Modules"]
+    subgraph Reasoning["Agent Thinking"]
         D[Self-Reflection<br/>reflector.py<br/>LLM judges success/failure]
         E[Task Inference<br/>task_breaker.py<br/>Decompose to subtasks]
         F[Skill Curation<br/>skill_manager.py<br/>Extract and save skills]
         G[Action Planning<br/>planner.py<br/>CodeAgent + Tools + Skills]
     end
 
-    subgraph Output["Execution"]
+    subgraph Output["UI Execution"]
         H1[Atomic Actions<br/>atomic_actions.py<br/>Low-level primitives]
         H2[Tools<br/>tools.py<br/>Validated @tool wrappers]
         I[Environment]

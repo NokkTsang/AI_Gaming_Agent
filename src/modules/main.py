@@ -58,11 +58,27 @@ class AIGamingAgent:
 
         Args:
             max_steps: Maximum steps per task (default: 50)
-            model: OpenAI model for planning and reasoning (default: gpt-4o-mini)
+            model: OpenAI model for planning and reasoning
         """
         self.max_steps = max_steps
         self.model = model
         api_key = os.getenv("OPENAI_API_KEY")
+
+        # Vision system prompt (used for all screenshot analysis)
+        self.vision_system_prompt = """You are a GUI automation agent. Analyze this screenshot carefully.
+
+Describe the screen in quadrants:
+- Top-left [0-0.5, 0-0.5]
+- Top-right [0.5-1, 0-0.5]  
+- Bottom-left [0-0.5, 0.5-1]
+- Bottom-right [0.5-1, 0.5-1]
+
+For each UI element, note:
+- Type (button/text field/link/icon)
+- Position (top/middle/bottom, left/center/right)
+- Approximate coordinates [x, y] in range [0,1]
+
+Be precise about locations for accurate clicking."""
 
         print("Initializing AI Gaming Agent...")
 
@@ -117,7 +133,7 @@ class AIGamingAgent:
             print("Step 1: Capturing initial screen...")
             screenshot_path = take_screenshot()
             initial_observation = analyze_screenshot(
-                screenshot_path, "Describe what you see on the screen in detail."
+                screenshot_path, self.vision_system_prompt
             )
             print(f"  Initial state: {initial_observation[:150]}...\n")
 
@@ -212,9 +228,13 @@ class AIGamingAgent:
                 # Step 7: Capture screen after action
                 print("  Capturing result...")
                 screenshot_path = take_screenshot()
+                observation_prompt = (
+                    self.vision_system_prompt
+                    + f"\n\nPrevious state: {observation_before[:100]}...\n"
+                    + "Describe what changed after the action."
+                )
                 observation_after = analyze_screenshot(
-                    screenshot_path,
-                    f"Describe what changed after the action. Previous: {observation_before[:100]}...",
+                    screenshot_path, observation_prompt
                 )
                 self.short_term.add_observation(observation_after)
                 print(f"  New state: {observation_after[:150]}...\n")
@@ -263,7 +283,7 @@ class AIGamingAgent:
                     consecutive_failures += 1
 
                     if consecutive_failures >= max_failures:
-                        print("  ⚠️ Too many failures. Replanning...")
+                        print("  ! Too many failures. Replanning...")
                         completed = self.short_term.state["subtasks"][
                             : self.short_term.state["current_subtask_index"]
                         ]
@@ -288,7 +308,7 @@ class AIGamingAgent:
             print(f"{'='*80}\n")
 
         except KeyboardInterrupt:
-            print("\n\n⚠️ Agent interrupted by user")
+            print("\n\n! Agent interrupted by user")
         except Exception as e:
             print(f"\n\n⨯ Agent error: {e}")
             import traceback
@@ -317,9 +337,12 @@ def main():
     # ============================================================
     # CONFIGURATION: Edit these values to customize the agent
     # ============================================================
-    MODEL = "gpt-4.1-nano"
+    MODEL = "gpt-4.1"
     MAX_STEPS = 50
     # ============================================================
+
+    print(f"Using model: {MODEL}")
+    print(f"Max steps per task: {MAX_STEPS}")
 
     agent = AIGamingAgent(max_steps=MAX_STEPS, model=MODEL)
     agent.run(task)
