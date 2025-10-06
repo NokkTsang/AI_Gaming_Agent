@@ -66,19 +66,8 @@ try:
 except Exception as e:
     print(f"❌ UI Automation failed: {e}")
 
-# Test 4: Object Detector (Placeholder)
-print("\n4️⃣ Testing Object Detector...")
-try:
-    from src.modules.information_gathering.object_detector import ObjectDetector
 
-    od = ObjectDetector()
-    detections = od.detect_objects("test.jpg")
-    print(f"✅ ObjectDetector initialized (placeholder mode)")
-    print(f"   Detections: {len(detections)}")
-except Exception as e:
-    print(f"❌ Object Detector failed: {e}")
-
-# Test 5: Test Executor
+# Test 4: Test Executor
 print("\n5️⃣ Testing Action Executor...")
 try:
     from modules.ui_automation.executor import ActionExecutor
@@ -95,12 +84,11 @@ try:
 except Exception as e:
     print(f"❌ Action Executor failed: {e}")
 
-# Test 6: File Structure
-print("\n6️⃣ Checking File Structure...")
+# Test 5: File Structure
+print("\n5️⃣ Checking File Structure...")
 expected_files = [
     "src/modules/screen_input/screen_capture.py",
     "src/modules/information_gathering/info_gather.py",
-    "src/modules/information_gathering/object_detector.py",
     "src/modules/action_planning/planner.py",
     "src/modules/self_reflection/reflector.py",
     "src/modules/task_inference/task_breaker.py",

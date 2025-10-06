@@ -114,7 +114,6 @@ flowchart TB
     subgraph Input["Data Input"]
         A[Screen Capture]
         B[Info Gathering<br/>Vision LLM]
-        B2[Object Detector<br/>placeholder]
     end
 
     subgraph Memory["Memory System"]
@@ -137,7 +136,6 @@ flowchart TB
     end
 
     A -->|screenshot| B
-    B2 -.->|annotate| B
     B -->|observation| C1
 
     C1 -->|state| D
