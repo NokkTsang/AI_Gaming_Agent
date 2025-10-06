@@ -54,7 +54,7 @@ except Exception as e:
 print("\n3️⃣ Testing UI Automation...")
 try:
     from src.modules.ui_automation.atomic_actions import UIAutomator
-    from src.modules.memory import tools
+    from modules.ui_automation import tools
 
     automator = UIAutomator()
     print("✅ UIAutomator initialized")

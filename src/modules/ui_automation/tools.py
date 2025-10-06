@@ -6,7 +6,7 @@ import os
 import pyautogui
 from smolagents import tool
 
-from ..ui_automation.atomic_actions import UIAutomator
+from .atomic_actions import UIAutomator
 
 
 _AUTOMATOR = UIAutomator()

@@ -119,8 +119,8 @@ config:
 ---
 flowchart TB
     subgraph Input["**Data Input**"]
-        A[Screen Capture]
-        B[Info Gathering<br/>Vision LLM]
+        A[Screen Capture<br/>screen_capture.py]
+        B[Info Gathering<br/>information_gathering.py<br/>Vision LLM]
     end
 
     subgraph Memory["**Memory System**"]
