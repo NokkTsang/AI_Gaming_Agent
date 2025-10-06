@@ -65,6 +65,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    ```
    rm src/modules/memory/data/*.json
    rm src/modules/memory/data/*.npy
+   rm src/modules/screen_input/screenshots/*.jpg
    ```
 
 ## Agent Architecture
