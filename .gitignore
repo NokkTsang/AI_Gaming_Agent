@@ -18,3 +18,8 @@ screenshots/
 
 # MacOS specific files
 .DS_Store
+
+# Memory Data
+data/
+*.json
+*.npy
