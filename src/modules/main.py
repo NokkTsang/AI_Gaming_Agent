@@ -67,16 +67,16 @@ class AIGamingAgent:
         # Vision system prompt (used for all screenshot analysis)
         self.vision_system_prompt = """You are a GUI automation agent. Analyze this screenshot carefully.
 
-Describe the screen in quadrants:
-- Top-left [0-0.5, 0-0.5]
-- Top-right [0.5-1, 0-0.5]  
-- Bottom-left [0-0.5, 0.5-1]
-- Bottom-right [0.5-1, 0.5-1]
+Use the 3x3 GRID REFERENCE provided to describe UI element locations.
+Reference grid cells (A1, A2, A3, B1, B2, B3, C1, C2, C3) when describing positions.
+
+Use DETECTED TEXT ELEMENTS (if provided) for precise coordinates of text-based UI.
 
 For each UI element, note:
 - Type (button/text field/link/icon)
-- Position (top/middle/bottom, left/center/right)
+- Grid cell location (e.g., "in A2" or "at B3")
 - Approximate coordinates [x, y] in range [0,1]
+- Text content if visible
 
 Be precise about locations for accurate clicking."""
 
@@ -114,6 +114,44 @@ Be precise about locations for accurate clicking."""
         w, h = pyautogui.size()
         self.executor.screen_width = int(w)
         self.executor.screen_height = int(h)
+
+    def compare_screenshots(
+        self, img1_path: str, img2_path: str, threshold: float = 0.02
+    ) -> bool:
+        """Compare two screenshots to detect if a change occurred.
+
+        Args:
+            img1_path: Path to first screenshot
+            img2_path: Path to second screenshot
+            threshold: Minimum change ratio to consider different (default 2%)
+
+        Returns:
+            True if screenshots are significantly different, False if same
+        """
+        try:
+            from PIL import Image
+            import numpy as np
+
+            img1 = Image.open(img1_path).convert("RGB")
+            img2 = Image.open(img2_path).convert("RGB")
+
+            # Resize to same size if different
+            if img1.size != img2.size:
+                img2 = img2.resize(img1.size)
+
+            # Convert to numpy arrays
+            arr1 = np.array(img1)
+            arr2 = np.array(img2)
+
+            # Calculate difference ratio
+            diff = np.abs(arr1.astype(float) - arr2.astype(float))
+            change_ratio = np.mean(diff) / 255.0
+
+            return change_ratio > threshold
+
+        except Exception as e:
+            print(f"   Warning: Screenshot comparison failed: {e}")
+            return True  # Assume change occurred if comparison fails
 
     def run(self, task: str):
         """
@@ -206,8 +244,9 @@ Be precise about locations for accurate clicking."""
                     print("✓ Task completed!")
                     break
 
-                # Record observation before action
+                # Record observation and screenshot before action
                 observation_before = current_observation
+                screenshot_before = screenshot_path
 
                 # Step 6: Execute action
                 print("  Executing action...")
@@ -227,17 +266,68 @@ Be precise about locations for accurate clicking."""
 
                 # Step 7: Capture screen after action
                 print("  Capturing result...")
-                screenshot_path = take_screenshot()
+                screenshot_after = take_screenshot()
+
+                # Check if screen changed (self-correction mechanism)
+                screen_changed = self.compare_screenshots(
+                    screenshot_before, screenshot_after
+                )
+
+                if not screen_changed and action_dict["action_type"] in [
+                    "click",
+                    "double_click",
+                    "right_click",
+                ]:
+                    print(
+                        "  Warning: Screen did not change after click. Retrying with correction..."
+                    )
+
+                    # Ask LLM to provide corrected coordinates with specific format
+                    correction_prompt = (
+                        self.vision_system_prompt
+                        + f"\n\nPREVIOUS FAILED ATTEMPT:\n"
+                        + f"- Clicked at: {action_dict['action_inputs'].get('start_box', 'unknown')}\n"
+                        + f"- Goal: {action_dict.get('thought', 'click action')}\n"
+                        + f"- Result: Nothing happened, screen unchanged\n\n"
+                        + "TASK: Find the EXACT target element and provide:\n"
+                        + "1. What element should be clicked (be very specific)\n"
+                        + "2. Which grid cell it's in (A1, A2, A3, B1, B2, B3, C1, C2, C3)\n"
+                        + "3. EXACT coordinates as [x, y] where x and y are between 0 and 1\n\n"
+                        + "Format your response as:\n"
+                        + "ELEMENT: [description]\n"
+                        + "GRID: [cell]\n"
+                        + "COORDINATES: [x, y]"
+                    )
+                    correction_observation = analyze_screenshot(
+                        screenshot_after, correction_prompt
+                    )
+                    print(
+                        f"  Correction suggestion:\n{correction_observation}\n"
+                    )
+
+                    # Let the agent retry in next iteration with this new information
+                    self.short_term.add_observation(
+                        f"CLICK FAILED at {action_dict['action_inputs'].get('start_box')}. "
+                        + f"Correction analysis:\n{correction_observation}\n"
+                        + "Use the EXACT coordinates provided above in your next attempt."
+                    )
+                    consecutive_failures += 1
+                    continue
+
+                # Normal observation after successful action
                 observation_prompt = (
                     self.vision_system_prompt
                     + f"\n\nPrevious state: {observation_before[:100]}...\n"
                     + "Describe what changed after the action."
                 )
                 observation_after = analyze_screenshot(
-                    screenshot_path, observation_prompt
+                    screenshot_after, observation_prompt
                 )
                 self.short_term.add_observation(observation_after)
                 print(f"  New state: {observation_after[:150]}...\n")
+
+                # Reset consecutive failures on successful action
+                consecutive_failures = 0
 
                 # Step 8: Self-reflection
                 print("  Reflecting on outcome...")

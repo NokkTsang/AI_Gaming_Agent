@@ -38,6 +38,11 @@ class ActionPlanner:
 - [1, 1] = bottom-right corner
 - [0.5, 0.5] = center of screen
 
+## IMPORTANT: Correction Feedback
+- If observation mentions "CLICK FAILED" with "COORDINATES: [x, y]", USE THOSE EXACT coordinates
+- Do NOT guess or estimate - use the provided corrected coordinates directly
+- The vision analysis has identified the precise location after a failed attempt
+
 ## Output Format
 Return ONLY a valid JSON object:
 ```json
@@ -61,7 +66,16 @@ Return ONLY a valid JSON object:
 }
 ```
 
-**Example 2: Type in search**
+**Example 2: Using correction coordinates**
+```json
+{
+  "thought": "Previous click failed. Using corrected coordinates from vision analysis.",
+  "action_type": "click",
+  "action_inputs": {"start_box": [0.125, 0.735]}
+}
+```
+
+**Example 3: Type in search**
 ```json
 {
   "thought": "The search box is visible. I\'ll type the search query.",
