@@ -189,6 +189,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Log
 
+### 8/10/2025
+
+- Add EasyOCR for character detection
+- Add YOLOv8Small for object detection
+- Adjust the screen capture to native resolution capture instead of logical resolution capture
+
 ### 5/10/2025
 
 - Added action_planning module
