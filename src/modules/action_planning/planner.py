@@ -145,7 +145,7 @@ Based on the current screen and task, what should be the next action? Return JSO
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.7,
-                max_tokens=1000,
+                max_tokens=2000,
             )
 
             response_text = response.choices[0].message.content.strip()
@@ -157,7 +157,7 @@ Based on the current screen and task, what should be the next action? Return JSO
                 return action_dict
             else:
                 print(
-                    f"   Warning: Failed to parse action from response: {response_text[:200]}"
+                    f"   Warning: Failed to parse action from response: {response_text[:500]}"
                 )
                 return None
 

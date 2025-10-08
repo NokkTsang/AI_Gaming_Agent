@@ -123,7 +123,7 @@ Be precise about locations for accurate clicking."""
         self.executor.screen_height = int(h)
 
     def compare_screenshots(
-        self, img1_path: str, img2_path: str, threshold: float = 0.02
+        self, img1_path: str, img2_path: str, threshold: float = 0.005
     ) -> bool:
         """Compare two screenshots to detect if a change occurred.
 
@@ -321,15 +321,33 @@ Be precise about locations for accurate clicking."""
                     target_objects = []
                     thought = action_dict.get("thought", "")
                     if "flag" in thought.lower() or "flag" in current_subtask.lower():
-                        target_objects.append("red flag")
-                        target_objects.append("flag marker")
+                        target_objects.extend(["red flag", "flag marker", "flag icon"])
                     if (
                         "button" in thought.lower()
                         or "button" in current_subtask.lower()
                     ):
-                        target_objects.append("button")
+                        target_objects.extend(
+                            [
+                                "button",
+                                "start button",
+                                "game button",
+                                "menu button",
+                                "play button",
+                            ]
+                        )
                     if "icon" in thought.lower():
-                        target_objects.append("icon")
+                        target_objects.extend(["icon", "game icon"])
+
+                    # If START is mentioned, add specific terms
+                    if "start" in thought.lower() or "start" in current_subtask.lower():
+                        target_objects.extend(
+                            ["start button", "start menu", "start icon"]
+                        )
+
+                    # Remove duplicates
+                    target_objects = (
+                        list(set(target_objects)) if target_objects else None
+                    )
 
                     # Ask LLM to provide corrected coordinates with object detection
                     correction_prompt = (
@@ -354,11 +372,11 @@ Be precise about locations for accurate clicking."""
                     correction_observation = analyze_screenshot(
                         screenshot_after,
                         correction_prompt,
-                        detect_objects=target_objects if target_objects else None,
+                        detect_objects=target_objects,
                     )
-                    print(f"  Correction suggestion:\n{correction_observation}\n")
-
-                    # Let the agent retry in next iteration with this new information
+                    print(
+                        f"  Correction suggestion:\n{correction_observation}\n"
+                    )  # Let the agent retry in next iteration with this new information
                     self.short_term.add_observation(
                         f"CLICK FAILED at {action_dict['action_inputs'].get('start_box')}. "
                         + f"Correction analysis:\n{correction_observation}\n"

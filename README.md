@@ -121,7 +121,8 @@ config:
 flowchart TB
     subgraph Input["**Data Input**"]
         A[Screen Capture<br/>screen_capture.py]
-        B[Info Gathering<br/>information_gathering.py<br/>Vision LLM]
+        B[Info Gathering<br/>info_gather.py<br/>Vision LLM + OCR]
+        B2[Object Detection<br/>object_detector.py<br/>YOLO-World]
     end
 
     subgraph Memory["**Memory System**"]
@@ -145,6 +146,8 @@ flowchart TB
     end
 
     A -->|screenshot| B
+    A -->|screenshot| B2
+    B2 -->|detected objects| B
     B -->|observation| C1
 
     C1 -->|state| D

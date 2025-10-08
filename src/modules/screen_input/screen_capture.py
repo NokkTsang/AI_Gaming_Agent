@@ -1,7 +1,8 @@
 import time
 from typing import Tuple, Optional
 import mss
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageGrab
+import sys
 
 # You may want to load these from your config system
 DEFAULT_OUTPUT_DIR = "src/modules/screen_input/screenshots"
@@ -10,6 +11,11 @@ FULLSCREEN = None
 
 def get_fullscreen_region() -> Tuple[int, int, int, int]:
     """Detects and returns the region for the primary monitor (full screen)."""
+    # On macOS, use ImageGrab to get proper Retina resolution
+    if sys.platform == "darwin":
+        # ImageGrab.grab() returns full screen at native resolution
+        return None  # Signal to use ImageGrab.grab() without bbox
+
     with mss.mss() as sct:
         monitor = sct.monitors[1]  # 1 is the primary monitor
         return (monitor["left"], monitor["top"], monitor["width"], monitor["height"])
@@ -34,21 +40,30 @@ def take_screenshot(
     if screen_region is FULLSCREEN:
         screen_region = get_fullscreen_region()
 
-    region = {
-        "left": screen_region[0],
-        "top": screen_region[1],
-        "width": screen_region[2],
-        "height": screen_region[3],
-    }
-
     os.makedirs(output_dir, exist_ok=True)
     screen_image_filename = os.path.join(output_dir, f"screen_{tid}.jpg")
 
-    with mss.mss() as sct:
-        screen_image = sct.grab(region)
-        image = Image.frombytes(
-            "RGB", screen_image.size, screen_image.bgra, "raw", "BGRX"
-        )
+    # On macOS, use ImageGrab for proper Retina resolution
+    if sys.platform == "darwin" and screen_region is None:
+        image = ImageGrab.grab(
+            all_screens=False
+        )  # Capture primary screen at full resolution
+        # Convert RGBA to RGB for JPEG saving
+        if image.mode == "RGBA":
+            image = image.convert("RGB")
+    else:
+        # Use mss for other platforms or specific regions
+        region = {
+            "left": screen_region[0],
+            "top": screen_region[1],
+            "width": screen_region[2],
+            "height": screen_region[3],
+        }
+        with mss.mss() as sct:
+            screen_image = sct.grab(region)
+            image = Image.frombytes(
+                "RGB", screen_image.size, screen_image.bgra, "raw", "BGRX"
+            )
 
     if draw_axis:
         draw = ImageDraw.Draw(image)

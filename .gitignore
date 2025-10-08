@@ -23,3 +23,9 @@ screenshots/
 data/
 *.json
 *.npy
+
+# Model Checkpoints
+checkpoints/
+*.ckpt
+*.pth
+*.pt

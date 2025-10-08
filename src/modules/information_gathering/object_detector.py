@@ -90,7 +90,7 @@ def detect_objects(
 
 
 def detect_objects_by_description(
-    image_path: str, descriptions: List[str], confidence_threshold: float = 0.2
+    image_path: str, descriptions: List[str], confidence_threshold: float = 0.05
 ) -> List[Dict[str, any]]:
     """Detect objects using text descriptions with YOLO-World.
 
@@ -127,8 +127,10 @@ def detect_objects_by_description(
 
         # Parse results
         detected_objects = []
+        total_detections = 0
         for result in results:
             boxes = result.boxes
+            total_detections = len(boxes)
             for box in boxes:
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 confidence = float(box.conf[0])
@@ -158,6 +160,14 @@ def detect_objects_by_description(
                         "confidence": confidence,
                     }
                 )
+
+        # Debug logging
+        if total_detections > 0:
+            print(
+                f"   YOLO detected {total_detections} objects, {len(detected_objects)} above threshold {confidence_threshold}"
+            )
+        else:
+            print(f"   YOLO found no objects matching: {descriptions}")
 
         return detected_objects
 

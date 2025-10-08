@@ -50,11 +50,14 @@ def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
 
         # Run OCR
         results = reader.readtext(image_path)
+        print(f"   OCR detected {len(results)} text elements")
 
         # Format results with normalized coordinates
         text_boxes = []
         for bbox, text, confidence in results:
-            if confidence < 0.5:  # Skip low-confidence detections
+            if (
+                confidence < 0.3
+            ):  # Skip very low-confidence detections (lowered from 0.5 for stylized game fonts)
                 continue
 
             # bbox is [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
@@ -74,6 +77,14 @@ def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
                     "height": (y_max - y_min) / img_height,
                     "confidence": confidence,
                 }
+            )
+
+        print(
+            f"   OCR found {len(text_boxes)} high-confidence text elements (>0.5 confidence)"
+        )
+        for box in text_boxes[:10]:  # Show first 10
+            print(
+                f"      '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}] (conf: {box['confidence']:.2f})"
             )
 
         return text_boxes
@@ -170,6 +181,9 @@ def analyze_screenshot(
                     f"{idx}. '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}]\n"
                 )
             enhanced_question = enhanced_question + ocr_info
+            print(f"   Added {len(text_boxes[:20])} OCR text elements to vision prompt")
+        else:
+            print("   OCR returned no text elements")
 
     # Add object detection if requested
     if detect_objects and OBJECT_DETECTION_AVAILABLE:
