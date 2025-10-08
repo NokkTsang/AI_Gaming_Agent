@@ -118,7 +118,7 @@ def analyze_screenshot(
     image_path: str,
     question: str = "Describe the screenshot briefly and list 3-5 salient UI elements.",
     model: str = "gpt-4.1-nano",
-    include_ocr: bool = False,
+    include_ocr: bool = True,
     include_grid: bool = True,
 ) -> str:
     """Send an image to a vision-capable OpenAI model and return its feedback.

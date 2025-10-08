@@ -72,11 +72,18 @@ Reference grid cells (A1, A2, A3, B1, B2, B3, C1, C2, C3) when describing positi
 
 Use DETECTED TEXT ELEMENTS (if provided) for precise coordinates of text-based UI.
 
+IMPORTANT: In games and applications, clickable elements are often VISUAL (icons, buttons, flags, markers).
+Text labels may appear ABOVE or NEAR the clickable element. Look for:
+- Buttons with icons or graphics
+- Flags, markers, or visual indicators
+- The clickable area may be BELOW or ADJACENT to text labels
+
 For each UI element, note:
-- Type (button/text field/link/icon)
+- Type (button/text field/link/icon/flag/marker)
+- Visual appearance (color, shape, icon type)
 - Grid cell location (e.g., "in A2" or "at B3")
-- Approximate coordinates [x, y] in range [0,1]
-- Text content if visible
+- Approximate coordinates [x, y] in range [0,1] of the CENTER of the clickable area
+- Text content if visible and its position relative to the clickable element
 
 Be precise about locations for accurate clicking."""
 
@@ -289,21 +296,21 @@ Be precise about locations for accurate clicking."""
                         + f"- Clicked at: {action_dict['action_inputs'].get('start_box', 'unknown')}\n"
                         + f"- Goal: {action_dict.get('thought', 'click action')}\n"
                         + f"- Result: Nothing happened, screen unchanged\n\n"
-                        + "TASK: Find the EXACT target element and provide:\n"
-                        + "1. What element should be clicked (be very specific)\n"
-                        + "2. Which grid cell it's in (A1, A2, A3, B1, B2, B3, C1, C2, C3)\n"
-                        + "3. EXACT coordinates as [x, y] where x and y are between 0 and 1\n\n"
+                        + "CRITICAL: The click target may be a VISUAL ELEMENT (icon/button/flag) NEAR the text, not the text itself.\n"
+                        + "Look for clickable UI elements like buttons, icons, or markers that are ADJACENT to or BELOW relevant text.\n\n"
+                        + "TASK: Find the EXACT clickable element:\n"
+                        + "1. Identify if there's a visual button/icon/flag near the text (describe color, shape, position relative to text)\n"
+                        + "2. Which grid cell is the CLICKABLE element in (A1, A2, A3, B1, B2, B3, C1, C2, C3)\n"
+                        + "3. EXACT coordinates of the CENTER of the clickable element as [x, y] where x and y are between 0 and 1\n\n"
                         + "Format your response as:\n"
-                        + "ELEMENT: [description]\n"
+                        + "ELEMENT: [visual description of clickable item]\n"
                         + "GRID: [cell]\n"
                         + "COORDINATES: [x, y]"
                     )
                     correction_observation = analyze_screenshot(
                         screenshot_after, correction_prompt
                     )
-                    print(
-                        f"  Correction suggestion:\n{correction_observation}\n"
-                    )
+                    print(f"  Correction suggestion:\n{correction_observation}\n")
 
                     # Let the agent retry in next iteration with this new information
                     self.short_term.add_observation(
