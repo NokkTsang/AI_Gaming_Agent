@@ -131,7 +131,7 @@ Based on the current screen and task, what should be the next action? Return JSO
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.7,
-                max_tokens=300,
+                max_tokens=1000,
             )
 
             response_text = response.choices[0].message.content.strip()
