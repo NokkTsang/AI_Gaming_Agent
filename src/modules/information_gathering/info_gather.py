@@ -9,6 +9,14 @@ import sys
 # Load environment variables (expects OPENAI_API_KEY in .env)
 load_dotenv()
 
+# Import object detector
+try:
+    from .object_detector import detect_objects_by_description
+
+    OBJECT_DETECTION_AVAILABLE = True
+except ImportError:
+    OBJECT_DETECTION_AVAILABLE = False
+
 
 def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
     """Extract text and bounding boxes from screenshot using OCR.
@@ -120,6 +128,7 @@ def analyze_screenshot(
     model: str = "gpt-4.1-nano",
     include_ocr: bool = True,
     include_grid: bool = True,
+    detect_objects: Optional[List[str]] = None,
 ) -> str:
     """Send an image to a vision-capable OpenAI model and return its feedback.
 
@@ -129,6 +138,7 @@ def analyze_screenshot(
         model: OpenAI model that supports vision (e.g., gpt-4o, gpt-4o-mini).
         include_ocr: Whether to include OCR text detection results.
         include_grid: Whether to include 3x3 grid reference.
+        detect_objects: List of objects to detect (e.g., ["red flag", "button"])
     Returns:
         The model's text response.
     """
@@ -160,6 +170,18 @@ def analyze_screenshot(
                     f"{idx}. '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}]\n"
                 )
             enhanced_question = enhanced_question + ocr_info
+
+    # Add object detection if requested
+    if detect_objects and OBJECT_DETECTION_AVAILABLE:
+        detected_objs = detect_objects_by_description(image_path, detect_objects)
+        if detected_objs:
+            obj_info = "\n\nDETECTED VISUAL OBJECTS:\n"
+            for idx, obj in enumerate(detected_objs, 1):
+                obj_info += (
+                    f"{idx}. {obj['object']} at [{obj['x']:.2f}, {obj['y']:.2f}] "
+                    f"(confidence: {obj['confidence']:.2f})\n"
+                )
+            enhanced_question = enhanced_question + obj_info
 
     # Read and base64-encode the image as a data URL
     with open(image_path, "rb") as f:

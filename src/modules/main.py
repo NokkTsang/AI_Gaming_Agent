@@ -198,6 +198,7 @@ Be precise about locations for accurate clicking."""
             step = 0
             consecutive_failures = 0
             max_failures = 3
+            subtask_attempts = {}  # Track attempts per subtask
 
             while step < self.max_steps:
                 step += 1
@@ -212,6 +213,33 @@ Be precise about locations for accurate clicking."""
                     break
 
                 print(f"Current subtask: {current_subtask}\n")
+
+                # Track subtask attempts
+                if current_subtask not in subtask_attempts:
+                    subtask_attempts[current_subtask] = 0
+                subtask_attempts[current_subtask] += 1
+
+                # Force skip if stuck too long on same subtask
+                if subtask_attempts[current_subtask] > 5:
+                    print(
+                        f"  Warning: Stuck on subtask for {subtask_attempts[current_subtask]} iterations"
+                    )
+                    print("  Suggesting to skip or try alternative approach...\n")
+
+                    skip_prompt = (
+                        f"You've attempted this subtask {subtask_attempts[current_subtask]} times without success: {current_subtask}\n\n"
+                        + "Options:\n"
+                        + "1. Try a completely different approach (different location, different action type)\n"
+                        + "2. Skip this subtask if it's blocking progress\n"
+                        + "3. Break it into smaller sub-steps\n\n"
+                        + "What should we do? Provide a new strategy."
+                    )
+
+                    # Add this feedback to observation
+                    self.short_term.add_observation(
+                        f"STUCK ALERT: Attempted '{current_subtask}' {subtask_attempts[current_subtask]} times. "
+                        + "Need alternative strategy or should skip this step."
+                    )
 
                 # Step 4: Retrieve relevant skills
                 print("  Retrieving relevant skills...")
@@ -289,7 +317,21 @@ Be precise about locations for accurate clicking."""
                         "  Warning: Screen did not change after click. Retrying with correction..."
                     )
 
-                    # Ask LLM to provide corrected coordinates with specific format
+                    # Extract target object from thought or subtask
+                    target_objects = []
+                    thought = action_dict.get("thought", "")
+                    if "flag" in thought.lower() or "flag" in current_subtask.lower():
+                        target_objects.append("red flag")
+                        target_objects.append("flag marker")
+                    if (
+                        "button" in thought.lower()
+                        or "button" in current_subtask.lower()
+                    ):
+                        target_objects.append("button")
+                    if "icon" in thought.lower():
+                        target_objects.append("icon")
+
+                    # Ask LLM to provide corrected coordinates with object detection
                     correction_prompt = (
                         self.vision_system_prompt
                         + f"\n\nPREVIOUS FAILED ATTEMPT:\n"
@@ -307,8 +349,12 @@ Be precise about locations for accurate clicking."""
                         + "GRID: [cell]\n"
                         + "COORDINATES: [x, y]"
                     )
+
+                    # Use object detection if we know what to look for
                     correction_observation = analyze_screenshot(
-                        screenshot_after, correction_prompt
+                        screenshot_after,
+                        correction_prompt,
+                        detect_objects=target_objects if target_objects else None,
                     )
                     print(f"  Correction suggestion:\n{correction_observation}\n")
 
