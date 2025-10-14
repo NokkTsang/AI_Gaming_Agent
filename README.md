@@ -195,7 +195,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Add YOLOv8Small for object detection
 - Adjust the screen capture to native resolution capture instead of logical resolution capture
 - To do:
-  - Test if saved succesfull memory skills can be reused
+  - Test if the saved succesfull memory skills can be reused
   - Compare strong model without vision support and weak model with vison support (ocr, yolo...)
 
 ### 5/10/2025
