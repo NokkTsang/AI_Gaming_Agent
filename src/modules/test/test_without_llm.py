@@ -96,9 +96,9 @@ expected_files = [
     "src/modules/memory/short_term.py",
     "src/modules/memory/long_term.py",
     "src/modules/memory/skill_retrieval.py",
-    "src/modules/memory/tools.py",
+    "src/modules/ui_automation/tools.py",
     "src/modules/ui_automation/atomic_actions.py",
-    "src/modules/test/executor.py",
+    "src/modules/ui_automation/executor.py",
     "src/modules/test/test_modules.py",
     "src/modules/main.py",
 ]
