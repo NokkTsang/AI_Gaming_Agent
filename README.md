@@ -198,6 +198,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Test if the saved succesfull memory skills can be reused
 - Compare strong model without vision support and weak model with vison support (ocr, yolo...)
 - Show complete thinking in terminal
+- Screenshot specific window?
 
 ### 8/10/2025
 
