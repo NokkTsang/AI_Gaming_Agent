@@ -197,7 +197,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Memory limit, delete old memory?
 - Test if the saved succesfull memory skills can be reused
 - Compare strong model without vision support and weak model with vison support (ocr, yolo...)
-- Show complete thinking in terminal
+- Store reflection into JSON everytime?
 - Screenshot specific window?
 
 ### 8/10/2025
