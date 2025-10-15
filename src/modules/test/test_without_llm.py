@@ -54,7 +54,7 @@ except Exception as e:
 print("\n3️⃣ Testing UI Automation...")
 try:
     from src.modules.ui_automation.atomic_actions import UIAutomator
-    from modules.ui_automation import tools
+    from src.modules.ui_automation import tools
 
     automator = UIAutomator()
     print("✅ UIAutomator initialized")
@@ -70,7 +70,7 @@ except Exception as e:
 # Test 4: Test Executor
 print("\n5️⃣ Testing Action Executor...")
 try:
-    from modules.ui_automation.executor import ActionExecutor
+    from src.modules.ui_automation.executor import ActionExecutor
     import pyautogui
 
     w, h = pyautogui.size()
