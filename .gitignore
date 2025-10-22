@@ -23,6 +23,8 @@ screenshots/
 data/
 *.json
 *.npy
+task_logs/
+*.log
 
 # Model Checkpoints
 checkpoints/

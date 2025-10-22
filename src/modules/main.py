@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Add src directory to path for imports
 repo_root = Path(__file__).parent.parent.parent
@@ -37,6 +38,56 @@ from modules.skill_curation.skill_manager import SkillManager
 load_dotenv()
 
 
+class TaskLogger:
+    """Handles logging of terminal output to files."""
+
+    def __init__(self, log_dir: str = "src/modules/memory/task_log"):
+        """Initialize logger with timestamped log file."""
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = self.log_dir / f"task_{timestamp}.log"
+
+        # Store original stdout/stderr
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
+
+    def start_logging(self):
+        """Start capturing all print statements to file."""
+        self.file_handle = open(self.log_file, "w", encoding="utf-8")
+        sys.stdout = TeeOutput(self.original_stdout, self.file_handle)
+        sys.stderr = TeeOutput(self.original_stderr, self.file_handle)
+
+    def stop_logging(self):
+        """Stop capturing and close log file."""
+        sys.stdout = self.original_stdout
+        sys.stderr = self.original_stderr
+        if hasattr(self, "file_handle"):
+            self.file_handle.close()
+
+    def get_log_path(self) -> str:
+        """Return path to current log file."""
+        return str(self.log_file)
+
+
+class TeeOutput:
+    """Redirect output to both original stream and file."""
+
+    def __init__(self, original, file_handle):
+        self.original = original
+        self.file = file_handle
+
+    def write(self, data):
+        self.original.write(data)
+        self.file.write(data)
+        self.file.flush()
+
+    def flush(self):
+        self.original.flush()
+        self.file.flush()
+
+
 class AIGamingAgent:
     """
     Full AI Gaming Agent with memory, reflection, and skill learning.
@@ -52,40 +103,48 @@ class AIGamingAgent:
     8. Skill curation and saving
     """
 
-    def __init__(self, max_steps: int = 50, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        max_steps: int = 50,
+        model: str = "gpt-4o-mini",
+        enable_ocr: bool = True,
+        enable_yolo: bool = True,
+    ):
         """
         Initialize the full agent with all components.
 
         Args:
             max_steps: Maximum steps per task (default: 50)
-            model: OpenAI model for planning and reasoning
+            model: OpenAI model for ALL components (planning, reasoning, and vision)
+            enable_ocr: Enable OCR text detection (default: True)
+            enable_yolo: Enable YOLO object detection on failed clicks (default: True)
         """
         self.max_steps = max_steps
+        self.max_subtask_attempts = 3  # Default, can be overridden
         self.model = model
+        self.vision_model = model  # Use same model for vision
+        self.enable_ocr = enable_ocr
+        self.enable_yolo = enable_yolo
         api_key = os.getenv("OPENAI_API_KEY")
 
         # Vision system prompt (used for all screenshot analysis)
-        self.vision_system_prompt = """You are a GUI automation agent. Analyze this screenshot carefully.
+        self.vision_system_prompt = """Analyze this screenshot for GUI automation.
 
-Use the 3x3 GRID REFERENCE provided to describe UI element locations.
-Reference grid cells (A1, A2, A3, B1, B2, B3, C1, C2, C3) when describing positions.
+Use 3x3 GRID (A1-C3) to describe locations. Use DETECTED TEXT coordinates when available.
 
-Use DETECTED TEXT ELEMENTS (if provided) for precise coordinates of text-based UI.
+FOCUS STATE (critical):
+- Any field FOCUSED? Look for: text cursor blinking, highlighted border, different background color
+- Hover/active indicators on buttons?
+→ If focused, agent should TYPE not CLICK
 
-IMPORTANT: In games and applications, clickable elements are often VISUAL (icons, buttons, flags, markers).
-Text labels may appear ABOVE or NEAR the clickable element. Look for:
-- Buttons with icons or graphics
-- Flags, markers, or visual indicators
-- The clickable area may be BELOW or ADJACENT to text labels
+UI ELEMENTS (only interactive ones):
+For each: type, appearance, grid cell, coordinates [x,y] in [0,1], text, state
 
-For each UI element, note:
-- Type (button/text field/link/icon/flag/marker)
-- Visual appearance (color, shape, icon type)
-- Grid cell location (e.g., "in A2" or "at B3")
-- Approximate coordinates [x, y] in range [0,1] of the CENTER of the clickable area
-- Text content if visible and its position relative to the clickable element
+Games: clickable=visual icons/buttons/markers, text may be ABOVE clickable area.
+Be concise and precise."""
 
-Be precise about locations for accurate clicking."""
+        # Initialize logger
+        self.logger = TaskLogger()
 
         print("Initializing AI Gaming Agent...")
 
@@ -103,11 +162,11 @@ Be precise about locations for accurate clicking."""
         self.long_term = SkillDatabase()
         self.skill_retrieval = EmbeddingRetriever()
 
-        # Reasoning modules
+        # Reasoning modules (all use the same model)
         print("  Initializing reasoning modules...")
-        self.task_breaker = TaskBreaker(api_key=api_key)
-        self.reflector = Reflector(api_key=api_key)
-        self.skill_manager = SkillManager(api_key=api_key)
+        self.task_breaker = TaskBreaker(api_key=api_key, model=model)
+        self.reflector = Reflector(api_key=api_key, model=model)
+        self.skill_manager = SkillManager(api_key=api_key, model=model)
 
         # Action planner
         self.planner = ActionPlanner(model=model, api_key=api_key)
@@ -121,16 +180,17 @@ Be precise about locations for accurate clicking."""
         w, h = pyautogui.size()
         self.executor.screen_width = int(w)
         self.executor.screen_height = int(h)
+        print(f"[DEBUG] Screen size updated: {w}x{h}")
 
     def compare_screenshots(
-        self, img1_path: str, img2_path: str, threshold: float = 0.005
+        self, img1_path: str, img2_path: str, threshold: float = 0.002
     ) -> bool:
         """Compare two screenshots to detect if a change occurred.
 
         Args:
             img1_path: Path to first screenshot
             img2_path: Path to second screenshot
-            threshold: Minimum change ratio to consider different (default 2%)
+            threshold: Minimum change ratio to consider different (default 0.2%)
 
         Returns:
             True if screenshots are significantly different, False if same
@@ -167,8 +227,12 @@ Be precise about locations for accurate clicking."""
         Args:
             task: High-level task description
         """
+        # Start logging all output
+        self.logger.start_logging()
+
         print(f"\n{'='*80}")
         print(f"Task: {task}")
+        print(f"Log file: {self.logger.get_log_path()}")
         print(f"{'='*80}\n")
 
         self.update_screen_size()
@@ -178,9 +242,14 @@ Be precise about locations for accurate clicking."""
             print("Step 1: Capturing initial screen...")
             screenshot_path = take_screenshot()
             initial_observation = analyze_screenshot(
-                screenshot_path, self.vision_system_prompt
+                screenshot_path,
+                self.vision_system_prompt,
+                model=self.vision_model,
+                include_ocr=self.enable_ocr,
             )
-            print(f"  Initial state: {initial_observation[:150]}...\n")
+            print(
+                f"  Initial observation received ({len(initial_observation)} chars)\n"
+            )
 
             # Step 2: Decompose task into subtasks
             print("Step 2: Breaking down task into subtasks...")
@@ -199,6 +268,16 @@ Be precise about locations for accurate clicking."""
             consecutive_failures = 0
             max_failures = 3
             subtask_attempts = {}  # Track attempts per subtask
+
+            # Timing tracking for performance monitoring
+            step_timings = {
+                "vision": [],
+                "planning": [],
+                "execution": [],
+                "reflection": [],
+                "completion_check": [],
+            }
+            task_start_time = time.time()
 
             while step < self.max_steps:
                 step += 1
@@ -219,26 +298,33 @@ Be precise about locations for accurate clicking."""
                     subtask_attempts[current_subtask] = 0
                 subtask_attempts[current_subtask] += 1
 
-                # Force skip if stuck too long on same subtask
-                if subtask_attempts[current_subtask] > 5:
+                # Skip subtask if exceeded max attempts
+                if subtask_attempts[current_subtask] > self.max_subtask_attempts:
                     print(
-                        f"  Warning: Stuck on subtask for {subtask_attempts[current_subtask]} iterations"
+                        f"  ⚠️ Subtask failed after {self.max_subtask_attempts} attempts, skipping to next subtask"
                     )
-                    print("  Suggesting to skip or try alternative approach...\n")
+                    print(f"     Failed subtask: {current_subtask}\n")
 
-                    skip_prompt = (
-                        f"You've attempted this subtask {subtask_attempts[current_subtask]} times without success: {current_subtask}\n\n"
-                        + "Options:\n"
-                        + "1. Try a completely different approach (different location, different action type)\n"
-                        + "2. Skip this subtask if it's blocking progress\n"
-                        + "3. Break it into smaller sub-steps\n\n"
-                        + "What should we do? Provide a new strategy."
-                    )
-
-                    # Add this feedback to observation
+                    # Log the skip
                     self.short_term.add_observation(
-                        f"STUCK ALERT: Attempted '{current_subtask}' {subtask_attempts[current_subtask]} times. "
-                        + "Need alternative strategy or should skip this step."
+                        f"SUBTASK SKIPPED: '{current_subtask}' failed after {self.max_subtask_attempts} attempts. Moving to next subtask."
+                    )
+
+                    # Advance to next subtask
+                    self.short_term.advance_subtask()
+                    subtask_attempts[current_subtask] = 0  # Reset counter
+                    continue
+
+                # Warn if approaching limit
+                if subtask_attempts[current_subtask] == self.max_subtask_attempts:
+                    print(
+                        f"  ⚠️ WARNING: Last attempt for this subtask (attempt {subtask_attempts[current_subtask]}/{self.max_subtask_attempts})"
+                    )
+                    print("  If this fails, subtask will be skipped\n")
+
+                    self.short_term.add_observation(
+                        f"FINAL ATTEMPT: This is the last try for '{current_subtask}'. "
+                        + "Consider alternative actions: different action types, different coordinates, hotkeys, or different UI elements."
                     )
 
                 # Step 4: Retrieve relevant skills
@@ -257,11 +343,14 @@ Be precise about locations for accurate clicking."""
 
                 # Step 5: Plan next action
                 print("  Planning next action...")
+                planning_start = time.time()
                 action_dict = self.planner.plan_next_action(
                     task=task,
                     observation=current_observation,
                     action_history=context["recent_actions"],
                 )
+                planning_time = time.time() - planning_start
+                step_timings["planning"].append(planning_time)
 
                 if action_dict is None:
                     print("  ⨯ Failed to generate action")
@@ -272,7 +361,8 @@ Be precise about locations for accurate clicking."""
                     continue
 
                 print(f"  Action: {action_dict['action_type']}")
-                print(f"  Inputs: {action_dict['action_inputs']}\n")
+                print(f"  Inputs: {action_dict['action_inputs']}")
+                print(f"  [Planning took {planning_time:.2f}s]\n")
 
                 # Check if finished
                 if action_dict["action_type"] == "finished":
@@ -285,12 +375,17 @@ Be precise about locations for accurate clicking."""
 
                 # Step 6: Execute action
                 print("  Executing action...")
+                execution_start = time.time()
                 try:
                     self.executor.execute(action_dict)
                     self.short_term.add_action(action_dict)  # Store as dict, not string
-                    print("  ✓ Action executed\n")
+                    execution_time = time.time() - execution_start
+                    step_timings["execution"].append(execution_time)
+                    print(f"  ✓ Action executed [took {execution_time:.2f}s]\n")
                 except Exception as e:
-                    print(f"  ⨯ Execution failed: {e}\n")
+                    execution_time = time.time() - execution_start
+                    step_timings["execution"].append(execution_time)
+                    print(f"  ⨯ Execution failed: {e} [took {execution_time:.2f}s]\n")
                     consecutive_failures += 1
                     if consecutive_failures >= max_failures:
                         break
@@ -304,6 +399,7 @@ Be precise about locations for accurate clicking."""
                 screenshot_after = take_screenshot()
 
                 # Check if screen changed (self-correction mechanism)
+                # Lower threshold (0.2%) catches subtle changes like focus borders
                 screen_changed = self.compare_screenshots(
                     screenshot_before, screenshot_after
                 )
@@ -356,23 +452,30 @@ Be precise about locations for accurate clicking."""
                         + f"- Clicked at: {action_dict['action_inputs'].get('start_box', 'unknown')}\n"
                         + f"- Goal: {action_dict.get('thought', 'click action')}\n"
                         + f"- Result: Nothing happened, screen unchanged\n\n"
-                        + "CRITICAL: The click target may be a VISUAL ELEMENT (icon/button/flag) NEAR the text, not the text itself.\n"
-                        + "Look for clickable UI elements like buttons, icons, or markers that are ADJACENT to or BELOW relevant text.\n\n"
-                        + "TASK: Find the EXACT clickable element:\n"
-                        + "1. Identify if there's a visual button/icon/flag near the text (describe color, shape, position relative to text)\n"
-                        + "2. Which grid cell is the CLICKABLE element in (A1, A2, A3, B1, B2, B3, C1, C2, C3)\n"
-                        + "3. EXACT coordinates of the CENTER of the clickable element as [x, y] where x and y are between 0 and 1\n\n"
+                        + "CRITICAL ANALYSIS NEEDED:\n"
+                        + "The click may have worked but produced no visible change. Check if:\n"
+                        + "1. Input field is already FOCUSED/ACTIVE (text cursor blinking, border highlighted)\n"
+                        + "2. Agent should TYPE or use HOTKEY instead of clicking more\n\n"
+                        + "If element is already active/focused → recommend TYPING or HOTKEY action\n"
+                        + "If element not found → find the EXACT clickable element:\n\n"
+                        + "TASK: Analyze current state and recommend next action:\n"
+                        + "1. Is target element focused/active?\n"
+                        + "2. Should agent TYPE (if field focused) or CLICK (if not focused)?\n"
+                        + "3. If clicking needed: exact visual description, grid cell, coordinates [x, y]\n\n"
                         + "Format your response as:\n"
-                        + "ELEMENT: [visual description of clickable item]\n"
-                        + "GRID: [cell]\n"
-                        + "COORDINATES: [x, y]"
+                        + "STATE: [element focus state]\n"
+                        + "RECOMMENDED ACTION: [type/click/hotkey]\n"
+                        + "ELEMENT: [visual description if clicking]\n"
+                        + "COORDINATES: [x, y] (only if clicking recommended)"
                     )
 
                     # Use object detection if we know what to look for
                     correction_observation = analyze_screenshot(
                         screenshot_after,
                         correction_prompt,
-                        detect_objects=target_objects,
+                        model=self.vision_model,
+                        include_ocr=self.enable_ocr,
+                        detect_objects=target_objects if self.enable_yolo else None,
                     )
                     print(
                         f"  Correction suggestion:\n{correction_observation}\n"
@@ -386,22 +489,31 @@ Be precise about locations for accurate clicking."""
                     continue
 
                 # Normal observation after successful action
+                vision_start = time.time()
                 observation_prompt = (
                     self.vision_system_prompt
                     + f"\n\nPrevious state: {observation_before[:100]}...\n"
                     + "Describe what changed after the action."
                 )
                 observation_after = analyze_screenshot(
-                    screenshot_after, observation_prompt
+                    screenshot_after,
+                    observation_prompt,
+                    model=self.vision_model,
+                    include_ocr=self.enable_ocr,
                 )
+                vision_time = time.time() - vision_start
+                step_timings["vision"].append(vision_time)
                 self.short_term.add_observation(observation_after)
-                print(f"  New state: {observation_after[:150]}...\n")
+                print(
+                    f"  New state: {observation_after[:150]}... [vision took {vision_time:.2f}s]\n"
+                )
 
                 # Reset consecutive failures on successful action
                 consecutive_failures = 0
 
                 # Step 8: Self-reflection
                 print("  Reflecting on outcome...")
+                reflection_start = time.time()
                 success, reasoning = self.reflector.judge_action_success(
                     task_goal=task,
                     current_subtask=current_subtask,
@@ -409,13 +521,72 @@ Be precise about locations for accurate clicking."""
                     observation_before=observation_before,
                     observation_after=observation_after,
                 )
+                reflection_time = time.time() - reflection_start
+                step_timings["reflection"].append(reflection_time)
 
                 if success:
-                    print(f"  ✓ Success: {reasoning}\n")
+                    print(
+                        f"  ✓ Success: {reasoning} [reflection took {reflection_time:.2f}s]\n"
+                    )
                     consecutive_failures = 0
 
                     # Advance to next subtask
                     self.short_term.advance_subtask()
+
+                    # Check if task is complete after successful subtask
+                    remaining_subtasks = self.short_term.state["subtasks"][
+                        self.short_term.state["current_subtask_index"] :
+                    ]
+
+                    if not remaining_subtasks:
+                        # All subtasks done - verify overall goal is achieved
+                        print(
+                            "  All subtasks completed. Verifying overall task goal..."
+                        )
+                        completion_start = time.time()
+                        is_complete = self.task_breaker.check_task_completion(
+                            task_goal=task, current_observation=observation_after
+                        )
+                        completion_time = time.time() - completion_start
+                        step_timings["completion_check"].append(completion_time)
+
+                        if is_complete:
+                            print(
+                                f"  ✓ Task goal verified as complete! [check took {completion_time:.2f}s]"
+                            )
+                            break
+                        else:
+                            print(
+                                f"  Task goal not yet achieved despite completing all subtasks [check took {completion_time:.2f}s]"
+                            )
+                            print("  Generating additional subtasks...")
+                            # Generate more subtasks to complete the goal
+                            new_subtasks = self.task_breaker.decompose_task(
+                                task, observation_after
+                            )
+                            self.short_term.update_subtasks(new_subtasks)
+
+                    elif len(remaining_subtasks) <= 2:
+                        # Near completion - proactively check if goal already achieved
+                        print(
+                            "  Near completion. Checking if task goal is already achieved..."
+                        )
+                        completion_start = time.time()
+                        is_complete = self.task_breaker.check_task_completion(
+                            task_goal=task, current_observation=observation_after
+                        )
+                        completion_time = time.time() - completion_start
+                        step_timings["completion_check"].append(completion_time)
+
+                        if is_complete:
+                            print(
+                                f"  ✓ Task goal achieved early! [check took {completion_time:.2f}s]"
+                            )
+                            break
+                        else:
+                            print(
+                                f"  Goal not yet achieved. Continuing... [check took {completion_time:.2f}s]"
+                            )
 
                     # Step 9: Skill curation (save successful patterns)
                     recent_actions = [
@@ -460,21 +631,66 @@ Be precise about locations for accurate clicking."""
                         consecutive_failures = 0
 
             # Final summary
+            total_time = time.time() - task_start_time
             print(f"\n{'='*80}")
             print("Session Summary")
             print(f"{'='*80}")
             print(f"Total iterations: {step}")
+            print(f"Total time: {total_time:.2f}s ({total_time/60:.1f} minutes)")
             print(f"Skills in database: {self.long_term.get_skill_count()}")
             print(f"Actions taken: {len(self.short_term.state['actions'])}")
+
+            # Performance breakdown
+            if step_timings["vision"]:
+                avg_vision = sum(step_timings["vision"]) / len(step_timings["vision"])
+                print(f"\nPerformance Breakdown:")
+                print(
+                    f"  Vision analysis: {len(step_timings['vision'])} calls, avg {avg_vision:.2f}s, total {sum(step_timings['vision']):.2f}s"
+                )
+            if step_timings["planning"]:
+                avg_planning = sum(step_timings["planning"]) / len(
+                    step_timings["planning"]
+                )
+                print(
+                    f"  Action planning: {len(step_timings['planning'])} calls, avg {avg_planning:.2f}s, total {sum(step_timings['planning']):.2f}s"
+                )
+            if step_timings["execution"]:
+                avg_execution = sum(step_timings["execution"]) / len(
+                    step_timings["execution"]
+                )
+                print(
+                    f"  Action execution: {len(step_timings['execution'])} calls, avg {avg_execution:.2f}s, total {sum(step_timings['execution']):.2f}s"
+                )
+            if step_timings["reflection"]:
+                avg_reflection = sum(step_timings["reflection"]) / len(
+                    step_timings["reflection"]
+                )
+                print(
+                    f"  Self-reflection: {len(step_timings['reflection'])} calls, avg {avg_reflection:.2f}s, total {sum(step_timings['reflection']):.2f}s"
+                )
+            if step_timings["completion_check"]:
+                avg_completion = sum(step_timings["completion_check"]) / len(
+                    step_timings["completion_check"]
+                )
+                print(
+                    f"  Completion checks: {len(step_timings['completion_check'])} calls, avg {avg_completion:.2f}s, total {sum(step_timings['completion_check']):.2f}s"
+                )
+
+            print(f"\nLog saved to: {self.logger.get_log_path()}")
             print(f"{'='*80}\n")
 
         except KeyboardInterrupt:
             print("\n\n! Agent interrupted by user")
+            print(f"Log saved to: {self.logger.get_log_path()}")
         except Exception as e:
             print(f"\n\n⨯ Agent error: {e}")
+            print(f"Log saved to: {self.logger.get_log_path()}")
             import traceback
 
             traceback.print_exc()
+        finally:
+            # Always stop logging and close file
+            self.logger.stop_logging()
 
 
 def main():
@@ -500,12 +716,21 @@ def main():
     # ============================================================
     MODEL = "gpt-4.1"
     MAX_STEPS = 50
+    MAX_SUBTASK_ATTEMPTS = 3  # Max attempts per subtask before skipping
+    ENABLE_OCR = True  # OCR provides precise coordinates for text elements
+    ENABLE_YOLO = True  # YOLO provides precise coordinates for visual elements
     # ============================================================
 
     print(f"Using model: {MODEL}")
-    print(f"Max steps per task: {MAX_STEPS}\n")
+    print(f"Max steps per task: {MAX_STEPS}")
+    print(f"Max attempts per subtask: {MAX_SUBTASK_ATTEMPTS}")
+    print(f"OCR enabled: {ENABLE_OCR}")
+    print(f"YOLO enabled: {ENABLE_YOLO}\n")
 
-    agent = AIGamingAgent(max_steps=MAX_STEPS, model=MODEL)
+    agent = AIGamingAgent(
+        max_steps=MAX_STEPS, model=MODEL, enable_ocr=ENABLE_OCR, enable_yolo=ENABLE_YOLO
+    )
+    agent.max_subtask_attempts = MAX_SUBTASK_ATTEMPTS  # Pass config to agent
     agent.run(task)
 
 

@@ -79,6 +79,9 @@ class ActionExecutor:
         action_type = action.get("action_type")
         inputs = action.get("action_inputs", {})
 
+        # DEBUG: Log action details
+        print(f"[DEBUG EXECUTOR] action_type='{action_type}', inputs={inputs}")
+
         if action_type in {
             "click",
             "left_single",
@@ -87,17 +90,24 @@ class ActionExecutor:
             "right_single",
         }:
             start_box = inputs.get("start_box")
+            print(f"[DEBUG EXECUTOR] start_box={start_box}")
             if start_box:
                 box = self._coerce_box(start_box)
                 cx, cy = _center_of_box(box)
                 x, y = self._denorm(cx, cy)
+                print(f"[DEBUG EXECUTOR] Calculated coordinates: x={x}, y={y}")
                 if action_type in {"click", "left_single"}:
+                    print(f"[DEBUG EXECUTOR] Executing CLICK at ({x}, {y})")
                     self.automator.click(x, y, button="left")
+                    print(f"[DEBUG EXECUTOR] Click completed")
                 elif action_type == "left_double":
+                    print(f"[DEBUG EXECUTOR] Executing DOUBLE-CLICK")
                     self.automator.double_click(x, y, button="left")
                 elif action_type == "right_single":
+                    print(f"[DEBUG EXECUTOR] Executing RIGHT-CLICK")
                     self.automator.right_click(x, y)
                 else:
+                    print(f"[DEBUG EXECUTOR] Executing MOVE (hover) to ({x}, {y})")
                     self.automator.move_to(x, y)
 
         elif action_type in {"drag", "select"}:

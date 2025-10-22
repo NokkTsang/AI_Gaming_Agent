@@ -11,17 +11,18 @@ from openai import OpenAI
 class Reflector:
     """Judges action success by analyzing observation changes."""
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
         """
         Initialize reflector with OpenAI API.
 
         Args:
             api_key: OpenAI API key (reads from env if not provided)
+            model: OpenAI model to use for reflection
         """
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-4o-mini"
+        self.model = model
 
     def judge_action_success(
         self,
@@ -53,6 +54,15 @@ class Reflector:
         )
 
         try:
+            print("\n" + "=" * 80)
+            print("SELF-REFLECTION REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nPrompt ({len(prompt)} chars):")
+            print("-" * 80)
+            print(prompt)
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -67,6 +77,16 @@ class Reflector:
             )
 
             result_text = response.choices[0].message.content.strip()
+
+            print("\nSELF-REFLECTION RESPONSE")
+            print("=" * 80)
+            print(result_text)
+            print("=" * 80)
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
 
             # Parse response
             if result_text.startswith("SUCCESS"):

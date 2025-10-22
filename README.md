@@ -61,11 +61,22 @@ It is suggested to use a remote virtual environment for environment configuratio
    python -m src.modules.main "Open Chrome and search for OpenAI"
    ```
 
-6. Reset memory
+6. View logs
+
+   All terminal output is automatically saved to timestamped log files:
+
+   ```
+   src/modules/memory/task_log/task_YYYYMMDD_HHMMSS.log
+   ```
+
+   Logs include full prompts, responses, and token usage for all LLM calls.
+
+7. Reset memory
    ```
    rm src/modules/memory/data/*.json
    rm src/modules/memory/data/*.npy
    rm src/modules/screen_input/screenshots/*.jpg
+   rm src/modules/memory/task_log/*.log  # Optional: clear logs
    ```
 
 ## Agent Architecture
@@ -199,6 +210,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Compare strong model without vision support and weak model with vison support (ocr, yolo...)
 - Store reflection into JSON everytime?
 - Screenshot specific window?
+
+### 22/10/2025
+
+- Added comprehensive LLM logging: all prompts, responses, and token usage are now logged
+- Added automatic log file saving to `src/modules/memory/task_log/` with timestamps
+- All terminal output is captured and saved for debugging and analysis
+- Added TaskLogger class with TeeOutput for simultaneous console and file logging
 
 ### 8/10/2025
 

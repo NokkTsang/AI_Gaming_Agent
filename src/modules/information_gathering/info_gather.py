@@ -203,6 +203,18 @@ def analyze_screenshot(
     data_url = f"data:image/jpeg;base64,{b64_img}"
 
     client = OpenAI(api_key=api_key)
+
+    # Log the prompt being sent
+    print("\n" + "=" * 80)
+    print("VISION API REQUEST")
+    print("=" * 80)
+    print(f"Model: {model}")
+    print(f"Prompt length: {len(enhanced_question)} characters")
+    print("\nPrompt:")
+    print("-" * 80)
+    print(enhanced_question)
+    print("-" * 80)
+
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -217,9 +229,22 @@ def analyze_screenshot(
                 ],
             }
         ],
-        max_tokens=800,
+        max_tokens=400,  # Reduced from 800 - be concise
     )
-    return response.choices[0].message.content
+
+    # Log the response and token usage
+    response_text = response.choices[0].message.content
+    print("\nVISION API RESPONSE")
+    print("=" * 80)
+    print(response_text)
+    print("=" * 80)
+    if hasattr(response, "usage") and response.usage:
+        print(
+            f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+        )
+    print("=" * 80 + "\n")
+
+    return response_text
 
 
 # ---- Optional: expose the analyzer as a smolagents Tool ----

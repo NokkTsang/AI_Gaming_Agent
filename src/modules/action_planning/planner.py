@@ -18,96 +18,44 @@ class ActionPlanner:
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt that defines the agent\'s action space."""
-        return """You are a GUI automation agent. Given a task and screen observation, you decide the next action.
+        return """You are a GUI automation agent. Decide the next action based on task and screen observation.
 
-## Available Actions
+## Actions
+1. click(start_box=[x, y]) - Click at normalized [0,1] coordinates
+2. double_click(start_box=[x, y])
+3. right_click(start_box=[x, y])
+4. drag(start_box=[x1, y1], end_box=[x2, y2])
+5. type(content="text") - Use \\n for Enter
+6. hotkey(key="cmd c") - Space-separated keys
+7. scroll(direction="up"/"down", start_box=[x, y])
+8. wait() - Wait 5 seconds
+9. finished(content="summary") - Task complete
 
-1. **click(start_box=[x, y])** - Click at normalized coordinates [x, y] where 0 ≤ x, y ≤ 1
-2. **double_click(start_box=[x, y])** - Double-click at position
-3. **right_click(start_box=[x, y])** - Right-click at position
-4. **drag(start_box=[x1, y1], end_box=[x2, y2])** - Drag from start to end
-5. **type(content="text")** - Type text (use \\n at end to press Enter)
-6. **hotkey(key="ctrl c")** - Press hotkey combo (space-separated, lowercase)
-7. **scroll(direction="up" or "down", start_box=[x, y])** - Scroll at position (optional)
-8. **wait()** - Wait 5 seconds
-9. **finished(content="summary")** - Mark task as complete
+## Coordinates
+Normalized [0,1]: [0,0]=top-left, [1,1]=bottom-right, [0.5,0.5]=center
 
-## Coordinate System
-- All coordinates are **normalized** in range [0, 1]
-- [0, 0] = top-left corner
-- [1, 1] = bottom-right corner
-- [0.5, 0.5] = center of screen
+## Correction Feedback
+If "CLICK FAILED" with "COORDINATES: [x, y]" → USE those EXACT coordinates (vision analysis correction)
 
-## IMPORTANT: Correction Feedback
-- If observation mentions "CLICK FAILED" with "COORDINATES: [x, y]", USE THOSE EXACT coordinates
-- Do NOT guess or estimate - use the provided corrected coordinates directly
-- The vision analysis has identified the precise location after a failed attempt
+## Failure Recovery (after 2+ failed clicks)
+1. Try typing (element may be focused)
+2. Try hotkeys (cmd+l, tab, enter, etc.)
+3. Try different interaction (double-click, different position)
+4. Skip after 3 failed attempts
 
-## Output Format
-Return ONLY a valid JSON object:
+NEVER repeat same failed action >2 times.
+
+## Output
+Valid JSON only:
 ```json
-{
-  "thought": "Brief reasoning about what to do next",
-  "action_type": "click",
-  "action_inputs": {
-    "start_box": [0.5, 0.1]
-  }
-}
+{"thought": "reasoning", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.8]}}
 ```
 
 ## Examples
+Click: {"thought": "Clicking START button", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.72]}}
+Finished: {"thought": "Game loaded successfully", "action_type": "finished", "action_inputs": {"content": "Started Kingdom Rush"}}
 
-**Example 1: Click address bar**
-```json
-{
-  "thought": "I need to open a browser first. I\'ll click on the Chrome icon in the taskbar.",
-  "action_type": "click",
-  "action_inputs": {"start_box": [0.5, 0.95]}
-}
-```
-
-**Example 2: Using correction coordinates**
-```json
-{
-  "thought": "Previous click failed. Using corrected coordinates from vision analysis.",
-  "action_type": "click",
-  "action_inputs": {"start_box": [0.125, 0.735]}
-}
-```
-
-**Example 3: Type in search**
-```json
-{
-  "thought": "The search box is visible. I\'ll type the search query.",
-  "action_type": "type",
-  "action_inputs": {"content": "openai\\n"}
-}
-```
-
-**Example 3: Open browser with hotkey**
-```json
-{
-  "thought": "I\'ll use Cmd+Space to open Spotlight and launch a browser.",
-  "action_type": "hotkey",
-  "action_inputs": {"key": "cmd space"}
-}
-```
-
-**Example 4: Task complete**
-```json
-{
-  "thought": "The search results for \'openai\' are now displayed. Task complete.",
-  "action_type": "finished",
-  "action_inputs": {"content": "Successfully searched for openai on Google"}
-}
-```
-
-## Important Rules
-1. Think step-by-step
-2. Only use actions from the list above
-3. Coordinates must be in [0, 1] range
-4. Return valid JSON only (no markdown, no extra text)
-5. Be specific about which UI element you\'re targeting
+Return JSON only, no markdown.
 """
 
     def plan_next_action(
@@ -138,6 +86,20 @@ Return ONLY a valid JSON object:
 Based on the current screen and task, what should be the next action? Return JSON only."""
 
         try:
+            # Log the planning request
+            print("\n" + "=" * 80)
+            print("ACTION PLANNER REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nSystem Prompt ({len(self.system_prompt)} chars):")
+            print("-" * 80)
+            print(self.system_prompt)
+            print("-" * 80)
+            print(f"\nUser Prompt ({len(user_prompt)} chars):")
+            print("-" * 80)
+            print(user_prompt)
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -149,6 +111,17 @@ Based on the current screen and task, what should be the next action? Return JSO
             )
 
             response_text = response.choices[0].message.content.strip()
+
+            # Log the response and token usage
+            print("\nACTION PLANNER RESPONSE")
+            print("=" * 80)
+            print(response_text)
+            print("=" * 80)
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
 
             # Parse the JSON response
             action_dict = self._parse_response(response_text)

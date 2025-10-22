@@ -11,17 +11,18 @@ from openai import OpenAI
 class TaskBreaker:
     """Decomposes tasks into subtasks and adjusts plans."""
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
         """
         Initialize task breaker with OpenAI API.
 
         Args:
             api_key: OpenAI API key (reads from env if not provided)
+            model: OpenAI model to use for task planning
         """
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-4o-mini"
+        self.model = model
 
     def decompose_task(self, task_goal: str, initial_observation: str) -> List[str]:
         """
@@ -45,11 +46,34 @@ Requirements:
 - Each subtask should be concrete and achievable
 - Subtasks should be ordered logically
 - Keep subtasks high-level (don't specify exact clicks)
-- Aim for 3-7 subtasks
+- Focus on ACTIONS, not observations (avoid "review", "check", "verify", "observe")
+- Each subtask should change the system state or interact with UI
+- Final subtask should be the completion of the goal, not a verification step
+- Aim for 3-6 subtasks
 
-Respond with a numbered list of subtasks, one per line."""
+GOOD examples:
+- "Click the Start button to launch the game"
+- "Navigate to settings menu"
+- "Enter username in login field"
+- "Submit the search query"
+
+BAD examples (too vague):
+- "Review the search results" (what does review mean?)
+- "Check if game loaded" (no action specified)
+- "Verify the page" (passive observation)
+
+Respond with a numbered list of ACTION-ORIENTED subtasks, one per line."""
 
         try:
+            print("\n" + "=" * 80)
+            print("TASK DECOMPOSITION REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nPrompt ({len(prompt)} chars):")
+            print("-" * 80)
+            print(prompt)
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -64,6 +88,16 @@ Respond with a numbered list of subtasks, one per line."""
             )
 
             result_text = response.choices[0].message.content.strip()
+
+            print("\nTASK DECOMPOSITION RESPONSE")
+            print("=" * 80)
+            print(result_text)
+            print("=" * 80)
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
 
             # Parse numbered list
             subtasks = []
@@ -127,6 +161,15 @@ Generate a new plan for the remaining subtasks. Consider:
 Respond with a numbered list of NEW subtasks to complete the task."""
 
         try:
+            print("\n" + "=" * 80)
+            print("TASK REPLANNING REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nPrompt ({len(prompt)} chars):")
+            print("-" * 80)
+            print(prompt)
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -141,6 +184,16 @@ Respond with a numbered list of NEW subtasks to complete the task."""
             )
 
             result_text = response.choices[0].message.content.strip()
+
+            print("\nTASK REPLANNING RESPONSE")
+            print("=" * 80)
+            print(result_text)
+            print("=" * 80)
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
 
             # Parse numbered list
             subtasks = []
@@ -174,7 +227,19 @@ Respond with a numbered list of NEW subtasks to complete the task."""
 Current Screen State:
 {current_observation}
 
-Has the task goal been achieved? Respond with only 'YES' or 'NO'."""
+Analyze if the task goal has been FULLY ACHIEVED based on the current screen state.
+
+Consider:
+- Is the desired end state visible on screen?
+- Are we at the expected final destination (e.g., game started, search results shown, form submitted)?
+- Has the action been completed (not just started)?
+
+For searches: Are search results displayed?
+For games: Has the game launched/started?
+For forms: Has submission completed?
+For navigation: Are we at the target page/screen?
+
+Respond with only 'YES' if the task goal is FULLY achieved, or 'NO' if more work is needed."""
 
         try:
             response = self.client.chat.completions.create(
@@ -182,7 +247,7 @@ Has the task goal been achieved? Respond with only 'YES' or 'NO'."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "You judge if a task goal has been achieved based on screen state.",
+                        "content": "You judge if a task goal has been fully achieved based on screen state. Be precise and look for concrete evidence of completion.",
                     },
                     {"role": "user", "content": prompt},
                 ],

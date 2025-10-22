@@ -11,17 +11,18 @@ from openai import OpenAI
 class SkillManager:
     """Extracts and manages reusable skills from successful actions."""
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
         """
         Initialize skill manager with OpenAI API.
 
         Args:
             api_key: OpenAI API key (reads from env if not provided)
+            model: OpenAI model to use for skill curation
         """
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-4o-mini"
+        self.model = model
 
     def should_save_as_skill(
         self, action_sequence: List[Dict], subtask_completed: str
@@ -91,6 +92,13 @@ Task: {subtask_description}
 Respond with only the function name, nothing else."""
 
         try:
+            print("\n" + "=" * 80)
+            print("SKILL NAME GENERATION REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nPrompt: {prompt}")
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -105,6 +113,14 @@ Respond with only the function name, nothing else."""
             )
 
             skill_name = response.choices[0].message.content.strip()
+
+            print(f"\nSKILL NAME GENERATION RESPONSE: {skill_name}")
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
+
             # Clean up name
             skill_name = skill_name.replace(" ", "_").lower()
             skill_name = "".join(c for c in skill_name if c.isalnum() or c == "_")
@@ -181,6 +197,15 @@ def function_name():
 """
 
         try:
+            print("\n" + "=" * 80)
+            print("SKILL REFINEMENT REQUEST")
+            print("=" * 80)
+            print(f"Model: {self.model}")
+            print(f"\nPrompt ({len(prompt)} chars):")
+            print("-" * 80)
+            print(prompt)
+            print("-" * 80)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -195,6 +220,16 @@ def function_name():
             )
 
             result = response.choices[0].message.content.strip()
+
+            print("\nSKILL REFINEMENT RESPONSE")
+            print("=" * 80)
+            print(result)
+            print("=" * 80)
+            if hasattr(response, "usage") and response.usage:
+                print(
+                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                )
+            print("=" * 80 + "\n")
 
             # Parse response
             skill_name = "new_skill"
