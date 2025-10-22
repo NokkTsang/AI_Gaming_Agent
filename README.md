@@ -76,7 +76,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    rm src/modules/memory/data/*.json
    rm src/modules/memory/data/*.npy
    rm src/modules/screen_input/screenshots/*.jpg
-   rm src/modules/memory/task_log/*.log  # Optional: clear logs
+   rm src/modules/memory/task_log/*.log
    ```
 
 ## Agent Architecture
