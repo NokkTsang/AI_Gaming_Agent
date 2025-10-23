@@ -126,6 +126,12 @@ class AIGamingAgent:
         self.vision_model = model  # Use same model for consistency
         self.enable_ocr = enable_ocr
         api_key = os.getenv("OPENAI_API_KEY")
+        # Optional: Prefer capturing a specific window first (then fallback to fullscreen)
+        # Read from environment to avoid hard-coding in code.
+        # Support both AGENT_WINDOW_TITLE and WINDOW_TITLE for convenience.
+        self.preferred_window_title = (
+            os.getenv("WINDOW_TITLE") or None
+        )
 
         # Vision system prompt (used for all screenshot analysis)
         self.vision_system_prompt = """Analyze screenshot for GUI automation.
@@ -245,7 +251,10 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         try:
             # Step 1: Capture initial screen
             print("Step 1: Capturing initial screen...")
-            screenshot_path = take_screenshot()
+            # Prefer window capture if a target title is configured; will fallback to fullscreen automatically
+            screenshot_path = take_screenshot(
+                window_title=self.preferred_window_title, method="auto"
+            )
             initial_observation = analyze_screenshot_with_detection(
                 screenshot_path,
                 self.vision_system_prompt,
@@ -402,7 +411,9 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
                 # Step 7: Capture screen after action
                 print("  Capturing result...")
-                screenshot_after = take_screenshot()
+                screenshot_after = take_screenshot(
+                    window_title=self.preferred_window_title, method="auto"
+                )
 
                 # Check if screen changed (self-correction mechanism)
                 # Lower threshold (0.2%) catches subtle changes like focus borders
