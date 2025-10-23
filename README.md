@@ -73,11 +73,27 @@ It is suggested to use a remote virtual environment for environment configuratio
    python -m src.modules.test.test_modules
    ```
 
+   Check the window capture:
+   ```
+   python -m src.modules.test.test_window_capture [optional_window_title]
+   ```
+
 6. Usage
 
+   Full screen
    ```
    python -m src.modules.main
    ```
+
+   Choose the specific window (matching with the most similar name of window)
+
+   ```
+   $env:WINDOW_TITLE = "chrome"
+   python -m src.modules.main
+   ```
+
+   Notes:
+   - You can also set `WINDOW_TITLE` in your .env file.
 
    Or with a custom task:
 
@@ -214,15 +230,23 @@ flowchart TB
     style Output fill:#F8BBD0
 ```
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- **Hugging Face** for the amazing smolagents framework
-
 ## Log
+
+### 23/10/2025
+
+- Unified window capture across Windows/macOS/Linux in a single API:
+   - Windows: Win32 PrintWindow for true background window capture; automatic fullscreen fallback if unavailable
+   - macOS: Quartz CGWindowListCreateImage for a specific window; automatic fullscreen fallback if unavailable
+   - Linux: Prefer `xwd` for window dump; fallback to `xwininfo` geometry + mss; automatic fullscreen fallback when tools are missing
+- Added fuzzy window title matching (substring first, then fuzzy) and window list printing for easier selection
+- Added a new test case `src/modules/test/test_window_capture.py`
+- Agent now supports prioritized window capture when a title is configured via environment variable:
+   - `WINDOW_TITLE` (e.g., `$env:WINDOW_TITLE = "chrome"` on PowerShell)
+   - If not set, behavior remains fullscreen-only
+- Requirements updated for macOS:
+   - Added `pyobjc-framework-Quartz; sys_platform == "darwin"` for macOS window capture
+- Linux system tools (optional, not in pip requirements): `wmctrl`, `xdotool`, `xwininfo`, `xwd`
+- Test of window capturing only done on WindowsOS
 
 ### 22/10/2025
 
@@ -287,3 +311,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### 18/9/2025
 
 - Initialized project
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- **Hugging Face** for the amazing smolagents framework
