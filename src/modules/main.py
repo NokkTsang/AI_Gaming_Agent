@@ -128,7 +128,7 @@ class AIGamingAgent:
         api_key = os.getenv("OPENAI_API_KEY")
         # Optional: Prefer capturing a specific window first (then fallback to fullscreen)
         # Read from environment to avoid hard-coding in code.
-        # Support both AGENT_WINDOW_TITLE and WINDOW_TITLE for convenience.
+        # Support WINDOW_TITLE for convenience.
         self.preferred_window_title = (
             os.getenv("WINDOW_TITLE") or None
         )
