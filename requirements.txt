@@ -18,3 +18,5 @@ sentence-transformers>=2.0.0
 numpy>=1.24.0
 easyocr>=1.7.0
 groundingdino-py>=0.4.0
+# macOS-only: Quartz bindings for macOS window capture
+pyobjc-framework-Quartz; sys_platform == "darwin"
