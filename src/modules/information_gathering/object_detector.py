@@ -1,182 +1,215 @@
 """
-Object detection module using YOLOv8/YOLOWorld for detecting visual elements.
-Works on both Mac and Windows (CPU-compatible).
+Object detection using GroundingDINO for precise visual element localization.
+Zero-shot detection with text prompts - works on any game or app without training.
 """
 
-from typing import List, Dict, Optional
-from PIL import Image
+from typing import List, Dict, Optional, Tuple
+from PIL import Image, ImageDraw, ImageFont
 import os
 
 
-def detect_objects(
-    image_path: str, target_objects: List[str], confidence_threshold: float = 0.3
-) -> List[Dict[str, any]]:
-    """Detect visual objects in screenshot using YOLO.
+# ============================================================================
+# GroundingDINO Backend (Preferred)
+# ============================================================================
 
-    Args:
-        image_path: Path to screenshot
-        target_objects: List of object names to detect (e.g., ["red flag", "button", "icon"])
-        confidence_threshold: Minimum confidence score (0-1)
 
-    Returns:
-        List of detected objects with normalized coordinates [x, y, width, height]
-    """
-    try:
-        from ultralytics import YOLO
+class GroundingDINODetector:
+    """Zero-shot object detector using GroundingDINO with text prompts."""
 
-        # Initialize YOLOv8 model (cached after first call)
-        if not hasattr(detect_objects, "model"):
-            print("   Initializing YOLO object detector (first-time setup)...")
-            # Use YOLOv8n (nano) for speed on CPU
-            detect_objects.model = YOLO("yolov8n.pt")
+    def __init__(self):
+        self.model = None
+        self.available = False
+        self._try_load()
 
-        model = detect_objects.model
+    def _try_load(self):
+        """Attempt to load GroundingDINO."""
+        try:
+            from groundingdino.util.inference import load_model, load_image, predict
+            import torch
 
-        # Load image to get dimensions
-        img = Image.open(image_path)
-        img_width, img_height = img.size
+            config_path = "./cache/GroundingDINO_SwinB_cfg.py"
+            checkpoint_path = "./cache/groundingdino_swinb_cogcoor.pth"
 
-        # Run detection
-        results = model(image_path, verbose=False)
+            if not os.path.exists(config_path) or not os.path.exists(checkpoint_path):
+                print("   GroundingDINO model files not found in ./cache/")
+                return
 
-        # Parse results
-        detected_objects = []
-        for result in results:
-            boxes = result.boxes
-            for box in boxes:
-                # Get box coordinates (xyxy format)
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                confidence = float(box.conf[0])
-                class_id = int(box.cls[0])
-                class_name = model.names[class_id]
+            # Force CPU mode for Mac compatibility (no CUDA)
+            # Set default device before loading model
+            torch.set_default_device("cpu")
 
-                # Skip if confidence too low
-                if confidence < confidence_threshold:
-                    continue
+            self.model = load_model(config_path, checkpoint_path)
+            self.model = self.model.to("cpu")  # Ensure model is on CPU
+            self.load_image = load_image
+            self.predict = predict
+            self.device = "cpu"
+            self.available = True
+            print(f"   ✓ GroundingDINO loaded (device: cpu)")
 
-                # Check if this object matches any target
-                matches_target = any(
-                    target.lower() in class_name.lower() for target in target_objects
+        except ImportError:
+            print("   GroundingDINO not installed (pip install groundingdino-py)")
+        except Exception as e:
+            print(f"   GroundingDINO load failed: {e}")
+
+    def detect(
+        self,
+        image_path: str,
+        text_prompt: str,
+        box_threshold: float = 0.35,
+        text_threshold: float = 0.25,
+    ) -> List[Dict]:
+        """Detect objects based on text prompt."""
+        if not self.available:
+            return []
+
+        try:
+            image_source, image = self.load_image(image_path)
+
+            if not text_prompt.endswith("."):
+                text_prompt = text_prompt + "."
+
+            # Use CPU device
+            boxes, logits, phrases = self.predict(
+                model=self.model,
+                image=image,
+                caption=text_prompt,
+                box_threshold=box_threshold,
+                text_threshold=text_threshold,
+                device=self.device,
+            )
+
+            results = []
+            for box, logit, phrase in zip(boxes, logits, phrases):
+                x_center = float(box[0])
+                y_center = float(box[1])
+                width = float(box[2])
+                height = float(box[3])
+
+                results.append(
+                    {
+                        "object": phrase,
+                        "x": round(x_center, 3),
+                        "y": round(y_center, 3),
+                        "width": round(width, 3),
+                        "height": round(height, 3),
+                        "confidence": round(float(logit), 3),
+                    }
                 )
 
-                if (
-                    matches_target or not target_objects
-                ):  # Include all if no targets specified
-                    # Normalize coordinates to [0,1]
-                    center_x = ((x1 + x2) / 2) / img_width
-                    center_y = ((y1 + y2) / 2) / img_height
-                    width = (x2 - x1) / img_width
-                    height = (y2 - y1) / img_height
+            return results
 
-                    detected_objects.append(
-                        {
-                            "object": class_name,
-                            "x": center_x,
-                            "y": center_y,
-                            "width": width,
-                            "height": height,
-                            "confidence": confidence,
-                        }
-                    )
-
-        return detected_objects
-
-    except ImportError:
-        print("   Warning: ultralytics not installed, object detection disabled")
-        return []
-    except Exception as e:
-        print(f"   Warning: Object detection failed: {e}")
-        return []
+        except Exception as e:
+            print(f"   GroundingDINO detection failed: {e}")
+            return []
 
 
-def detect_objects_by_description(
-    image_path: str, descriptions: List[str], confidence_threshold: float = 0.05
-) -> List[Dict[str, any]]:
-    """Detect objects using text descriptions with YOLO-World.
+# ============================================================================
+# Unified Detection Interface
+# ============================================================================
 
-    This is more flexible than standard YOLO as it can detect objects
-    based on natural language descriptions without pre-training.
+# Global detector instance
+_detector = None
+
+
+def get_detector() -> GroundingDINODetector:
+    """Get or create singleton GroundingDINO detector."""
+    global _detector
+    if _detector is None:
+        _detector = GroundingDINODetector()
+    return _detector
+
+
+def detect_objects_smart(
+    image_path: str, text_prompt: str, confidence_threshold: float = 0.35
+) -> List[Dict]:
+    """
+    Detect objects in image using text description.
 
     Args:
-        image_path: Path to screenshot
-        descriptions: Text descriptions (e.g., ["red flag marker", "start button"])
+        image_path: Path to image
+        text_prompt: Description (e.g., "red flag", "tower site", "enemy soldier")
         confidence_threshold: Minimum confidence score
 
     Returns:
         List of detected objects with normalized coordinates
     """
-    try:
-        from ultralytics import YOLOWorld
-
-        # Initialize YOLO-World model (cached after first call)
-        if not hasattr(detect_objects_by_description, "model"):
-            print("   Initializing YOLO-World detector (first-time setup)...")
-            detect_objects_by_description.model = YOLOWorld("yolov8s-world.pt")
-
-        model = detect_objects_by_description.model
-
-        # Set custom classes for detection
-        model.set_classes(descriptions)
-
-        # Load image to get dimensions
-        img = Image.open(image_path)
-        img_width, img_height = img.size
-
-        # Run detection
-        results = model(image_path, verbose=False)
-
-        # Parse results
-        detected_objects = []
-        total_detections = 0
-        for result in results:
-            boxes = result.boxes
-            total_detections = len(boxes)
-            for box in boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                confidence = float(box.conf[0])
-                class_id = int(box.cls[0])
-                class_name = (
-                    descriptions[class_id]
-                    if class_id < len(descriptions)
-                    else "unknown"
-                )
-
-                if confidence < confidence_threshold:
-                    continue
-
-                # Normalize coordinates
-                center_x = ((x1 + x2) / 2) / img_width
-                center_y = ((y1 + y2) / 2) / img_height
-                width = (x2 - x1) / img_width
-                height = (y2 - y1) / img_height
-
-                detected_objects.append(
-                    {
-                        "object": class_name,
-                        "x": center_x,
-                        "y": center_y,
-                        "width": width,
-                        "height": height,
-                        "confidence": confidence,
-                    }
-                )
-
-        # Debug logging
-        if total_detections > 0:
-            print(
-                f"   YOLO detected {total_detections} objects, {len(detected_objects)} above threshold {confidence_threshold}"
-            )
-        else:
-            print(f"   YOLO found no objects matching: {descriptions}")
-
-        return detected_objects
-
-    except ImportError:
-        print("   Warning: YOLOWorld not available, falling back to standard YOLO")
-        return detect_objects(image_path, descriptions, confidence_threshold)
-    except Exception as e:
-        print(f"   Warning: Object detection by description failed: {e}")
+    detector = get_detector()
+    if not detector.available:
+        print(f"   ⚠️  Object detection disabled (GroundingDINO not available)")
         return []
+
+    results = detector.detect(image_path, text_prompt, confidence_threshold)
+    if results:
+        print(f"   ✓ Found {len(results)} objects matching '{text_prompt}'")
+    else:
+        print(f"   ✗ No objects found matching '{text_prompt}'")
+
+    return results
+
+
+def annotate_detections(
+    image_path: str, detections: List[Dict], output_path: Optional[str] = None
+) -> Optional[str]:
+    """
+    Draw bounding boxes on image with detection results.
+
+    Args:
+        image_path: Path to original image
+        detections: List of detection results
+        output_path: Where to save (optional, auto-generated if None)
+
+    Returns:
+        Path to annotated image
+    """
+    if not detections:
+        return None
+
+    try:
+        img = Image.open(image_path)
+        draw = ImageDraw.Draw(img)
+        width, height = img.size
+
+        # Load font
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 16)
+        except:
+            font = ImageFont.load_default()
+
+        # Draw each detection
+        for det in detections:
+            # Calculate pixel coordinates from normalized
+            x_center = det["x"] * width
+            y_center = det["y"] * height
+            w = det["width"] * width
+            h = det["height"] * height
+
+            x1 = int(x_center - w / 2)
+            y1 = int(y_center - h / 2)
+            x2 = int(x_center + w / 2)
+            y2 = int(y_center + h / 2)
+
+            # Draw bounding box
+            draw.rectangle([x1, y1, x2, y2], outline="red", width=3)
+
+            # Draw label with coordinates
+            label = f"{det['object']} [{det['x']:.2f}, {det['y']:.2f}]"
+
+            # Background for text
+            text_bbox = draw.textbbox((x1, y1 - 22), label, font=font)
+            draw.rectangle(text_bbox, fill="red")
+            draw.text((x1, y1 - 22), label, fill="white", font=font)
+
+        # Save annotated image
+        if output_path is None:
+            base, ext = os.path.splitext(image_path)
+            output_path = f"{base}_detected{ext}"
+
+        img.save(output_path)
+        return output_path
+
+    except Exception as e:
+        print(f"   Annotation failed: {e}")
+        return None
 
 
 if __name__ == "__main__":
@@ -193,8 +226,8 @@ if __name__ == "__main__":
 
     print(f"\nDetecting '{description}' in {image_path}...")
 
-    # Try YOLO-World first
-    objects = detect_objects_by_description(image_path, [description])
+    # Use GroundingDINO detection
+    objects = detect_objects_smart(image_path, description)
 
     if objects:
         print(f"\nFound {len(objects)} objects:")
@@ -202,5 +235,10 @@ if __name__ == "__main__":
             print(
                 f"  - {obj['object']}: [{obj['x']:.3f}, {obj['y']:.3f}] (confidence: {obj['confidence']:.2f})"
             )
+
+        # Annotate image
+        annotated = annotate_detections(image_path, objects)
+        if annotated:
+            print(f"\n✓ Annotated image saved: {annotated}")
     else:
         print("No objects detected")

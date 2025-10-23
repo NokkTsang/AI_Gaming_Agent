@@ -26,7 +26,10 @@ data/
 task_logs/
 *.log
 
-# Model Checkpoints
+# Model Checkpoints and Cache
+# Note: cache/ contains GroundingDINO models (~895MB) - too large for GitHub
+# Users should run ./setup_groundingdino.sh to download models locally
+cache/
 checkpoints/
 *.ckpt
 *.pth

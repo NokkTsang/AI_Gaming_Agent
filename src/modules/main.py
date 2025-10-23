@@ -19,7 +19,10 @@ repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root / "src"))
 
 from modules.screen_input.screen_capture import take_screenshot
-from modules.information_gathering.info_gather import analyze_screenshot
+from modules.information_gathering.info_gather import (
+    analyze_screenshot,
+    analyze_screenshot_with_detection,
+)
 from modules.action_planning.planner import ActionPlanner
 from modules.ui_automation.executor import ActionExecutor
 from modules.ui_automation.atomic_actions import UIAutomator
@@ -108,7 +111,6 @@ class AIGamingAgent:
         max_steps: int = 50,
         model: str = "gpt-4o-mini",
         enable_ocr: bool = True,
-        enable_yolo: bool = True,
     ):
         """
         Initialize the full agent with all components.
@@ -117,31 +119,34 @@ class AIGamingAgent:
             max_steps: Maximum steps per task (default: 50)
             model: OpenAI model for ALL components (planning, reasoning, and vision)
             enable_ocr: Enable OCR text detection (default: True)
-            enable_yolo: Enable YOLO object detection on failed clicks (default: True)
         """
         self.max_steps = max_steps
         self.max_subtask_attempts = 3  # Default, can be overridden
         self.model = model
-        self.vision_model = model  # Use same model for vision
+        self.vision_model = model  # Use same model for consistency
         self.enable_ocr = enable_ocr
-        self.enable_yolo = enable_yolo
         api_key = os.getenv("OPENAI_API_KEY")
 
         # Vision system prompt (used for all screenshot analysis)
-        self.vision_system_prompt = """Analyze this screenshot for GUI automation.
+        self.vision_system_prompt = """Analyze screenshot for GUI automation.
 
-Use 3x3 GRID (A1-C3) to describe locations. Use DETECTED TEXT coordinates when available.
+FOCUS STATE: Any field focused? (cursor blinking, highlighted border)
+→ If focused, TYPE not CLICK
 
-FOCUS STATE (critical):
-- Any field FOCUSED? Look for: text cursor blinking, highlighted border, different background color
-- Hover/active indicators on buttons?
-→ If focused, agent should TYPE not CLICK
+UI ELEMENTS (interactive only):
+List each: type, appearance, coordinates [x,y] from DETECTED TEXT OR visual estimate, text, brief note
 
-UI ELEMENTS (only interactive ones):
-For each: type, appearance, grid cell, coordinates [x,y] in [0,1], text, state
+OBJECT DETECTION (for visual elements without text):
+If you see icons, markers, or game elements that need PRECISE coordinates, request detection:
+REQUEST_DETECTION: <object name>
 
-Games: clickable=visual icons/buttons/markers, text may be ABOVE clickable area.
-Be concise and precise."""
+Examples:
+- "red flag icon below START HERE text" → REQUEST_DETECTION: red flag
+- "tower building sites on map" → REQUEST_DETECTION: tower site  
+- "enemy units on path" → REQUEST_DETECTION: enemy
+- "Search button (has text)" → Use OCR coordinates (no detection needed)
+
+Use OCR coordinates for text. Request detection for visual elements. Be concise."""
 
         # Initialize logger
         self.logger = TaskLogger()
@@ -241,11 +246,12 @@ Be concise and precise."""
             # Step 1: Capture initial screen
             print("Step 1: Capturing initial screen...")
             screenshot_path = take_screenshot()
-            initial_observation = analyze_screenshot(
+            initial_observation = analyze_screenshot_with_detection(
                 screenshot_path,
                 self.vision_system_prompt,
                 model=self.vision_model,
                 include_ocr=self.enable_ocr,
+                enable_object_detection=True,
             )
             print(
                 f"  Initial observation received ({len(initial_observation)} chars)\n"
@@ -445,37 +451,29 @@ Be concise and precise."""
                         list(set(target_objects)) if target_objects else None
                     )
 
-                    # Ask LLM to provide corrected coordinates with object detection
+                    # Ask LLM to provide corrected coordinates
                     correction_prompt = (
                         self.vision_system_prompt
                         + f"\n\nPREVIOUS FAILED ATTEMPT:\n"
                         + f"- Clicked at: {action_dict['action_inputs'].get('start_box', 'unknown')}\n"
                         + f"- Goal: {action_dict.get('thought', 'click action')}\n"
                         + f"- Result: Nothing happened, screen unchanged\n\n"
-                        + "CRITICAL ANALYSIS NEEDED:\n"
-                        + "The click may have worked but produced no visible change. Check if:\n"
-                        + "1. Input field is already FOCUSED/ACTIVE (text cursor blinking, border highlighted)\n"
-                        + "2. Agent should TYPE or use HOTKEY instead of clicking more\n\n"
-                        + "If element is already active/focused → recommend TYPING or HOTKEY action\n"
-                        + "If element not found → find the EXACT clickable element:\n\n"
-                        + "TASK: Analyze current state and recommend next action:\n"
+                        + "CRITICAL ANALYSIS:\n"
                         + "1. Is target element focused/active?\n"
                         + "2. Should agent TYPE (if field focused) or CLICK (if not focused)?\n"
-                        + "3. If clicking needed: exact visual description, grid cell, coordinates [x, y]\n\n"
-                        + "Format your response as:\n"
+                        + "3. If clicking needed: exact coordinates [x, y] from OCR\n\n"
+                        + "Format:\n"
                         + "STATE: [element focus state]\n"
                         + "RECOMMENDED ACTION: [type/click/hotkey]\n"
-                        + "ELEMENT: [visual description if clicking]\n"
                         + "COORDINATES: [x, y] (only if clicking recommended)"
                     )
 
-                    # Use object detection if we know what to look for
-                    correction_observation = analyze_screenshot(
+                    correction_observation = analyze_screenshot_with_detection(
                         screenshot_after,
                         correction_prompt,
                         model=self.vision_model,
                         include_ocr=self.enable_ocr,
-                        detect_objects=target_objects if self.enable_yolo else None,
+                        enable_object_detection=True,
                     )
                     print(
                         f"  Correction suggestion:\n{correction_observation}\n"
@@ -495,11 +493,12 @@ Be concise and precise."""
                     + f"\n\nPrevious state: {observation_before[:100]}...\n"
                     + "Describe what changed after the action."
                 )
-                observation_after = analyze_screenshot(
+                observation_after = analyze_screenshot_with_detection(
                     screenshot_after,
                     observation_prompt,
                     model=self.vision_model,
                     include_ocr=self.enable_ocr,
+                    enable_object_detection=True,
                 )
                 vision_time = time.time() - vision_start
                 step_timings["vision"].append(vision_time)
@@ -718,18 +717,14 @@ def main():
     MAX_STEPS = 50
     MAX_SUBTASK_ATTEMPTS = 3  # Max attempts per subtask before skipping
     ENABLE_OCR = True  # OCR provides precise coordinates for text elements
-    ENABLE_YOLO = True  # YOLO provides precise coordinates for visual elements
     # ============================================================
 
     print(f"Using model: {MODEL}")
     print(f"Max steps per task: {MAX_STEPS}")
     print(f"Max attempts per subtask: {MAX_SUBTASK_ATTEMPTS}")
-    print(f"OCR enabled: {ENABLE_OCR}")
-    print(f"YOLO enabled: {ENABLE_YOLO}\n")
+    print(f"OCR enabled: {ENABLE_OCR}\n")
 
-    agent = AIGamingAgent(
-        max_steps=MAX_STEPS, model=MODEL, enable_ocr=ENABLE_OCR, enable_yolo=ENABLE_YOLO
-    )
+    agent = AIGamingAgent(max_steps=MAX_STEPS, model=MODEL, enable_ocr=ENABLE_OCR)
     agent.max_subtask_attempts = MAX_SUBTASK_ATTEMPTS  # Pass config to agent
     agent.run(task)
 

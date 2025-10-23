@@ -3,19 +3,35 @@ from dotenv import load_dotenv
 from typing import Optional, List, Dict, Tuple
 import base64
 import os
+import io
 import glob
 import sys
+from PIL import Image
 
 # Load environment variables (expects OPENAI_API_KEY in .env)
 load_dotenv()
 
-# Import object detector
-try:
-    from .object_detector import detect_objects_by_description
 
-    OBJECT_DETECTION_AVAILABLE = True
-except ImportError:
-    OBJECT_DETECTION_AVAILABLE = False
+def resize_for_vision(image: Image.Image) -> Image.Image:
+    """Resize image to reduce tokens while preserving aspect ratio.
+
+    Scales down large images to max 1024px on longest edge.
+    Works on any screen resolution/ratio.
+
+    Args:
+        image: PIL Image object
+
+    Returns:
+        Resized PIL Image (or original if already small)
+    """
+    max_edge = 1024
+    width, height = image.size
+    ratio = max_edge / max(width, height)
+
+    if ratio < 1:  # Only downscale, never upscale
+        new_size = (int(width * ratio), int(height * ratio))
+        return image.resize(new_size, Image.LANCZOS)
+    return image
 
 
 def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
@@ -97,109 +113,86 @@ def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
         return []
 
 
-def create_grid_overlay(image_width: int, image_height: int) -> str:
-    """Create a 3x3 grid description for spatial reference.
+def extract_detection_requests(text: str) -> List[str]:
+    """Extract object detection requests from vision model response.
+
+    Looks for patterns like:
+    - REQUEST_DETECTION: red flag
+    - REQUEST_DETECTION: enemy soldier
 
     Args:
-        image_width: Screen width in pixels
-        image_height: Screen height in pixels
+        text: Vision model response text
 
     Returns:
-        Formatted grid description string
+        List of object names to detect
     """
-    grid_desc = "\n3x3 GRID REFERENCE:\n"
-    grid_labels = [
-        [
-            "A1 [0.0-0.33, 0.0-0.33]",
-            "A2 [0.33-0.67, 0.0-0.33]",
-            "A3 [0.67-1.0, 0.0-0.33]",
-        ],
-        [
-            "B1 [0.0-0.33, 0.33-0.67]",
-            "B2 [0.33-0.67, 0.33-0.67]",
-            "B3 [0.67-1.0, 0.33-0.67]",
-        ],
-        [
-            "C1 [0.0-0.33, 0.67-1.0]",
-            "C2 [0.33-0.67, 0.67-1.0]",
-            "C3 [0.67-1.0, 0.67-1.0]",
-        ],
-    ]
+    import re
 
-    for row in grid_labels:
-        grid_desc += " | ".join(row) + "\n"
+    requests = []
+    pattern = r"REQUEST_DETECTION:\s*([^\n]+)"
+    matches = re.findall(pattern, text, re.IGNORECASE)
 
-    return grid_desc
+    for match in matches:
+        # Clean up the object name
+        obj_name = match.strip()
+        if obj_name and obj_name.lower() != "none":
+            requests.append(obj_name)
+
+    return requests
 
 
 # ---- Minimal helper to send an image to an LLM and get feedback ----
 def analyze_screenshot(
     image_path: str,
     question: str = "Describe the screenshot briefly and list 3-5 salient UI elements.",
-    model: str = "gpt-4.1-nano",
+    model: str = "gpt-4o",
     include_ocr: bool = False,
-    include_grid: bool = True,
-    detect_objects: Optional[List[str]] = None,
 ) -> str:
     """Send an image to a vision-capable OpenAI model and return its feedback.
 
     Args:
         image_path: Local path to the image (jpg/png).
         question: Instruction for the LLM about how to analyze the image.
-        model: OpenAI model that supports vision (e.g., gpt-4o, gpt-4o-mini).
+        model: OpenAI model that supports vision (e.g., gpt-4o, gpt-4.1).
         include_ocr: Whether to include OCR text detection results.
-        include_grid: Whether to include 3x3 grid reference.
-        detect_objects: List of objects to detect (e.g., ["red flag", "button"])
     Returns:
         The model's text response.
     """
     from openai import OpenAI  # lightweight import to keep module load fast
-    from PIL import Image
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("Missing OPENAI_API_KEY. Add it to your .env file.")
 
-    # Get image dimensions
+    # Load and resize image
     img = Image.open(image_path)
-    img_width, img_height = img.size
+    original_size = img.size
+    img = resize_for_vision(img)
+    resized_size = img.size
 
-    # Build enhanced question with OCR and grid data
-    enhanced_question = question
-
-    if include_grid:
-        enhanced_question = (
-            create_grid_overlay(img_width, img_height) + "\n" + enhanced_question
+    if resized_size != original_size:
+        print(
+            f"   Image resized: {original_size} → {resized_size} (token optimization)"
         )
+
+    # Build enhanced question with OCR data
+    enhanced_question = question
 
     if include_ocr:
         text_boxes = extract_text_with_ocr(image_path)
         if text_boxes:
             ocr_info = "\n\nDETECTED TEXT ELEMENTS:\n"
             for idx, box in enumerate(text_boxes[:20], 1):  # Limit to top 20
-                ocr_info += (
-                    f"{idx}. '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}]\n"
-                )
+                ocr_info += f"{idx}. '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}] (conf: {box['confidence']:.2f})\n"
             enhanced_question = enhanced_question + ocr_info
             print(f"   Added {len(text_boxes[:20])} OCR text elements to vision prompt")
         else:
             print("   OCR returned no text elements")
 
-    # Add object detection if requested
-    if detect_objects and OBJECT_DETECTION_AVAILABLE:
-        detected_objs = detect_objects_by_description(image_path, detect_objects)
-        if detected_objs:
-            obj_info = "\n\nDETECTED VISUAL OBJECTS:\n"
-            for idx, obj in enumerate(detected_objs, 1):
-                obj_info += (
-                    f"{idx}. {obj['object']} at [{obj['x']:.2f}, {obj['y']:.2f}] "
-                    f"(confidence: {obj['confidence']:.2f})\n"
-                )
-            enhanced_question = enhanced_question + obj_info
-
-    # Read and base64-encode the image as a data URL
-    with open(image_path, "rb") as f:
-        b64_img = base64.b64encode(f.read()).decode("utf-8")
+    # Encode the resized image
+    buffered = io.BytesIO()
+    img.save(buffered, format="JPEG", quality=85)
+    b64_img = base64.b64encode(buffered.getvalue()).decode("utf-8")
     data_url = f"data:image/jpeg;base64,{b64_img}"
 
     client = OpenAI(api_key=api_key)
@@ -245,6 +238,93 @@ def analyze_screenshot(
     print("=" * 80 + "\n")
 
     return response_text
+
+
+def analyze_screenshot_with_detection(
+    image_path: str,
+    question: str,
+    model: str = "gpt-4o",
+    include_ocr: bool = False,
+    enable_object_detection: bool = True,
+) -> str:
+    """
+    Hybrid analysis: Vision model can request object detection for precise coordinates.
+
+    Flow:
+    1. Vision model analyzes screenshot (with OCR if enabled)
+    2. If response contains "REQUEST_DETECTION: <object>", run object detector
+    3. Annotate image with detection bounding boxes
+    4. Re-analyze annotated image for final decision
+
+    Args:
+        image_path: Path to screenshot
+        question: Vision prompt
+        model: OpenAI vision model
+        include_ocr: Include OCR text detection
+        enable_object_detection: Allow vision to request object detection
+
+    Returns:
+        Final vision analysis (with detection coordinates if requested)
+    """
+    from .object_detector import detect_objects_smart, annotate_detections
+
+    # Phase 1: Initial vision analysis
+    initial_response = analyze_screenshot(image_path, question, model, include_ocr)
+
+    # Check if object detection requested
+    if not enable_object_detection:
+        return initial_response
+
+    detection_requests = extract_detection_requests(initial_response)
+
+    if not detection_requests:
+        # No detection needed
+        return initial_response
+
+    # Phase 2: Run object detection for requested objects
+    print(f"\n   🔍 Vision requested detection for: {detection_requests}")
+
+    all_detections = []
+    for obj_name in detection_requests:
+        detections = detect_objects_smart(image_path, obj_name)
+        if detections:
+            print(f"      ✓ Found {len(detections)} '{obj_name}' objects")
+            all_detections.extend(detections)
+        else:
+            print(f"      ✗ No '{obj_name}' objects found")
+
+    if not all_detections:
+        print("   ⚠️  No objects detected, using initial analysis")
+        return initial_response
+
+    # Phase 3: Annotate image with detections
+    annotated_path = annotate_detections(image_path, all_detections)
+    if not annotated_path:
+        print("   ⚠️  Annotation failed, using initial analysis")
+        return initial_response
+
+    print(f"   ✓ Annotated image with {len(all_detections)} detections")
+
+    # Phase 4: Re-analyze with annotated image
+    detection_summary = "\n\nDETECTED OBJECTS:\n"
+    for idx, det in enumerate(all_detections, 1):
+        detection_summary += (
+            f"{idx}. {det['object']} at [{det['x']:.2f}, {det['y']:.2f}] "
+            f"(confidence: {det['confidence']:.2f})\n"
+        )
+
+    final_question = f"""{question}
+
+{detection_summary}
+
+The image now shows bounding boxes around detected objects with their coordinates.
+Use these precise coordinates for actions."""
+
+    final_response = analyze_screenshot(
+        annotated_path, final_question, model, include_ocr=False
+    )
+
+    return final_response
 
 
 # ---- Optional: expose the analyzer as a smolagents Tool ----

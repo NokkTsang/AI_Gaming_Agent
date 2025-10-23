@@ -24,7 +24,31 @@ It is suggested to use a remote virtual environment for environment configuratio
    pip install -r requirements.txt
    ```
 
-3. Create a `.env` file for storing api key
+3. **(Optional) Install GroundingDINO** for precise visual detection:
+
+   **Quick Setup (Recommended):**
+
+   ```bash
+   ./setup_groundingdino.sh
+   ```
+
+   **Manual Setup:**
+
+   ```bash
+   # Install GroundingDINO
+   pip install groundingdino-py
+
+   # Download model files to ./cache/
+   mkdir -p cache
+   cd cache
+   wget https://raw.githubusercontent.com/IDEA-Research/GroundingDINO/main/groundingdino/config/GroundingDINO_SwinB.cfg.py -O GroundingDINO_SwinB_cfg.py
+   wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth
+   cd ..
+   ```
+
+   **Note**: The agent works without GroundingDINO (vision-only mode), but GroundingDINO provides much better accuracy for clicking visual elements like icons, buttons, and game objects.
+
+4. Create a `.env` file for storing api key
 
    ```
    echo 'OPENAI_API_KEY=your-api-key' > .env
@@ -36,7 +60,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    export OPENAI_API_KEY='your-api-key'
    ```
 
-4. Running Tests
+5. Running Tests
    Without LLM (basic module tests):
 
    ```
@@ -49,7 +73,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    python -m src.modules.test.test_modules
    ```
 
-5. Usage
+6. Usage
 
    ```
    python -m src.modules.main
@@ -61,7 +85,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    python -m src.modules.main "Open Chrome and search for OpenAI"
    ```
 
-6. View logs
+7. View logs
 
    All terminal output is automatically saved to timestamped log files:
 
@@ -71,7 +95,7 @@ It is suggested to use a remote virtual environment for environment configuratio
 
    Logs include full prompts, responses, and token usage for all LLM calls.
 
-7. Reset memory
+8. Reset memory
    ```
    rm src/modules/memory/data/*.json
    rm src/modules/memory/data/*.npy
@@ -133,7 +157,7 @@ flowchart TB
     subgraph Input["**Data Input**"]
         A[Screen Capture<br/>screen_capture.py]
         B[Info Gathering<br/>info_gather.py<br/>Vision LLM + OCR]
-        B2[Object Detection<br/>object_detector.py<br/>YOLO-World]
+        B2[Object Detection<br/>object_detector.py<br/>GroundingDINO]
     end
 
     subgraph Memory["**Memory System**"]
@@ -200,6 +224,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Log
 
+### 22/10/2025
+
+- Added comprehensive LLM logging: all prompts, responses, and token usage are now logged
+- Added automatic log file saving to `src/modules/memory/task_log/` with timestamps
+- All terminal output is captured and saved for debugging and analysis
+- Added TaskLogger class with TeeOutput for simultaneous console and file logging
+- **Hybrid Vision + Object Detection System**: Vision model can now request object detection for precise coordinates
+  - Vision LLM handles strategic decisions and context understanding
+  - GroundingDINO provides precise visual element localization when requested
+  - Automatic fallback: works without GroundingDINO (vision-only mode)
+  - Vision model outputs `REQUEST_DETECTION: <object>` for visual elements without text
+  - System annotates images with bounding boxes and re-analyzes for precise coordinates
+- **Removed YOLO**: Simplified to GroundingDINO only (better for games, zero-shot detection)
+- **Performance optimizations**: Image resizing (1024px max), simplified prompts, removed grid system
+
 ### 15/10/2025
 
 - Focus on image contextual memory (image to text description)
@@ -211,17 +250,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Store reflection into JSON everytime?
 - Screenshot specific window?
 
-### 22/10/2025
-
-- Added comprehensive LLM logging: all prompts, responses, and token usage are now logged
-- Added automatic log file saving to `src/modules/memory/task_log/` with timestamps
-- All terminal output is captured and saved for debugging and analysis
-- Added TaskLogger class with TeeOutput for simultaneous console and file logging
-
 ### 8/10/2025
 
 - Add EasyOCR for character detection
-- Add YOLOv8Small for object detection
+- Add YOLO for object detection (later replaced with GroundingDINO)
 - Adjust the screen capture to native resolution capture instead of logical resolution capture
 
 ### 5/10/2025
