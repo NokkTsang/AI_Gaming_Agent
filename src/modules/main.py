@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
+from typing import Tuple
 
 # Add src directory to path for imports
 repo_root = Path(__file__).parent.parent.parent
@@ -111,6 +112,7 @@ class AIGamingAgent:
         max_steps: int = 50,
         model: str = "gpt-4o-mini",
         enable_ocr: bool = True,
+        enable_grounding_dino: bool = True,
     ):
         """
         Initialize the full agent with all components.
@@ -119,19 +121,22 @@ class AIGamingAgent:
             max_steps: Maximum steps per task (default: 50)
             model: OpenAI model for ALL components (planning, reasoning, and vision)
             enable_ocr: Enable OCR text detection (default: True)
+            enable_grounding_dino: Enable GroundingDINO object detection (default: True)
         """
         self.max_steps = max_steps
         self.max_subtask_attempts = 3  # Default, can be overridden
         self.model = model
         self.vision_model = model  # Use same model for consistency
         self.enable_ocr = enable_ocr
+        self.enable_grounding_dino = enable_grounding_dino
         api_key = os.getenv("OPENAI_API_KEY")
         # Optional: Prefer capturing a specific window first (then fallback to fullscreen)
         # Read from environment to avoid hard-coding in code.
         # Support WINDOW_TITLE for convenience.
-        self.preferred_window_title = (
-            os.getenv("WINDOW_TITLE") or None
-        )
+        self.preferred_window_title = os.getenv("WINDOW_TITLE") or None
+
+        # Monitor selection: 0=all, 1=primary (default), 2=secondary, etc.
+        self.monitor_index = int(os.getenv("MONITOR_INDEX", "1"))
 
         # Vision system prompt (used for all screenshot analysis)
         self.vision_system_prompt = """Analyze screenshot for GUI automation.
@@ -184,14 +189,20 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
         print("✓ Agent initialized successfully!\n")
 
-    def update_screen_size(self):
-        """Dynamically update screen size for executor."""
-        import pyautogui
+    def update_screen_size(self, screen_region: Tuple[int, int, int, int]):
+        """Update screen size for executor based on actual captured region.
 
-        w, h = pyautogui.size()
-        self.executor.screen_width = int(w)
-        self.executor.screen_height = int(h)
-        print(f"[DEBUG] Screen size updated: {w}x{h}")
+        Args:
+            screen_region: Tuple of (left, top, width, height) of captured screen
+        """
+        # Update executor with actual captured screen dimensions and offset
+        self.executor.screen_left = int(screen_region[0])
+        self.executor.screen_top = int(screen_region[1])
+        self.executor.screen_width = int(screen_region[2])
+        self.executor.screen_height = int(screen_region[3])
+        print(
+            f"[DEBUG] Screen region updated: offset=({screen_region[0]}, {screen_region[1]}), size={screen_region[2]}x{screen_region[3]}"
+        )
 
     def compare_screenshots(
         self, img1_path: str, img2_path: str, threshold: float = 0.002
@@ -246,21 +257,26 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         print(f"Log file: {self.logger.get_log_path()}")
         print(f"{'='*80}\n")
 
-        self.update_screen_size()
-
         try:
             # Step 1: Capture initial screen
             print("Step 1: Capturing initial screen...")
-            # Prefer window capture if a target title is configured; will fallback to fullscreen automatically
-            screenshot_path = take_screenshot(
-                window_title=self.preferred_window_title, method="auto"
+            # Capture screenshot and get the actual screen region for coordinate mapping
+            screenshot_path, screen_region = take_screenshot(
+                window_title=self.preferred_window_title,
+                method="auto",
+                focus_window=True,
+                monitor_index=self.monitor_index,
             )
+
+            # Update executor with actual captured screen dimensions
+            self.update_screen_size(screen_region)
+
             initial_observation = analyze_screenshot_with_detection(
                 screenshot_path,
                 self.vision_system_prompt,
                 model=self.vision_model,
                 include_ocr=self.enable_ocr,
-                enable_object_detection=True,
+                enable_object_detection=self.enable_grounding_dino,
             )
             print(
                 f"  Initial observation received ({len(initial_observation)} chars)\n"
@@ -411,9 +427,17 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
                 # Step 7: Capture screen after action
                 print("  Capturing result...")
-                screenshot_after = take_screenshot(
-                    window_title=self.preferred_window_title, method="auto"
+                screenshot_after, screen_region_after = take_screenshot(
+                    window_title=self.preferred_window_title,
+                    method="auto",
+                    focus_window=True,
+                    monitor_index=self.monitor_index,
                 )
+
+                # Update screen size if region changed (shouldn't happen, but defensive)
+                if screen_region_after != screen_region:
+                    self.update_screen_size(screen_region_after)
+                    screen_region = screen_region_after
 
                 # Check if screen changed (self-correction mechanism)
                 # Lower threshold (0.2%) catches subtle changes like focus borders
@@ -484,7 +508,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                         correction_prompt,
                         model=self.vision_model,
                         include_ocr=self.enable_ocr,
-                        enable_object_detection=True,
+                        enable_object_detection=self.enable_grounding_dino,
                     )
                     print(
                         f"  Correction suggestion:\n{correction_observation}\n"
@@ -509,7 +533,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     observation_prompt,
                     model=self.vision_model,
                     include_ocr=self.enable_ocr,
-                    enable_object_detection=True,
+                    enable_object_detection=self.enable_grounding_dino,
                 )
                 vision_time = time.time() - vision_start
                 step_timings["vision"].append(vision_time)
@@ -728,14 +752,23 @@ def main():
     MAX_STEPS = 50
     MAX_SUBTASK_ATTEMPTS = 3  # Max attempts per subtask before skipping
     ENABLE_OCR = True  # OCR provides precise coordinates for text elements
+    ENABLE_GROUNDING_DINO = (
+        True  # GroundingDINO provides precise coordinates for visual elements
+    )
     # ============================================================
 
     print(f"Using model: {MODEL}")
     print(f"Max steps per task: {MAX_STEPS}")
     print(f"Max attempts per subtask: {MAX_SUBTASK_ATTEMPTS}")
-    print(f"OCR enabled: {ENABLE_OCR}\n")
+    print(f"OCR enabled: {ENABLE_OCR}")
+    print(f"GroundingDINO enabled: {ENABLE_GROUNDING_DINO}\n")
 
-    agent = AIGamingAgent(max_steps=MAX_STEPS, model=MODEL, enable_ocr=ENABLE_OCR)
+    agent = AIGamingAgent(
+        max_steps=MAX_STEPS,
+        model=MODEL,
+        enable_ocr=ENABLE_OCR,
+        enable_grounding_dino=ENABLE_GROUNDING_DINO,
+    )
     agent.max_subtask_attempts = MAX_SUBTASK_ATTEMPTS  # Pass config to agent
     agent.run(task)
 

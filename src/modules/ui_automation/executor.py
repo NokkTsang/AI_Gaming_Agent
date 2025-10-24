@@ -49,14 +49,22 @@ class ActionExecutor:
         self,
         screen_width: int,
         screen_height: int,
+        screen_left: int = 0,
+        screen_top: int = 0,
         automator: UIAutomator | None = None,
     ) -> None:
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.screen_left = screen_left  # Offset from (0,0) for multi-monitor
+        self.screen_top = screen_top
         self.automator = automator or UIAutomator()
 
     def _denorm(self, nx: float, ny: float) -> Tuple[float, float]:
-        return nx * self.screen_width, ny * self.screen_height
+        # Convert normalized [0,1] to absolute screen coordinates
+        # accounting for monitor offset in multi-monitor setups
+        x = nx * self.screen_width + self.screen_left
+        y = ny * self.screen_height + self.screen_top
+        return x, y
 
     def _coerce_box(self, box_val: Any) -> List[float]:
         """Accept a box as list/tuple or as string; return validated list of floats in [0,1]."""

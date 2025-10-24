@@ -24,12 +24,20 @@ It is suggested to use a remote virtual environment for environment configuratio
    pip install -r requirements.txt
    ```
 
-3. **(Optional) Install GroundingDINO** for precise visual detection:
+3. **Install GroundingDINO** for precise visual detection:
 
    **Quick Setup (Recommended):**
 
+   Linux/macOS:
+
    ```bash
    ./setup_groundingdino.sh
+   ```
+
+   Windows:
+
+   ```cmd
+   setup_groundingdino.bat
    ```
 
    **Manual Setup:**
@@ -74,32 +82,84 @@ It is suggested to use a remote virtual environment for environment configuratio
    ```
 
    Check the window capture:
+
    ```
    python -m src.modules.test.test_window_capture [optional_window_title]
    ```
 
 6. Usage
 
-   Full screen
-   ```
-   python -m src.modules.main
+   **Quick Start (Recommended):**
+
+   Linux/macOS:
+
+   ```bash
+   ./run_agent.sh
    ```
 
-   Choose the specific window (matching with the most similar name of window)
+   Windows:
 
+   ```cmd
+   run_agent.bat
    ```
-   $env:WINDOW_TITLE = "chrome"
-   python -m src.modules.main
+
+   Interactive launcher with two modes:
+
+   - **Fullscreen**: Capture entire monitor (choose monitor 0/1/2/...)
+   - **Specific Window**: Capture only target window (higher resolution, better accuracy)
+
+   **Manual Usage:**
+
+   Fullscreen on primary monitor:
+
+   Linux/macOS:
+
+   ```bash
+   MONITOR_INDEX=1 python -m src.modules.main "Your task here"
    ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   $env:MONITOR_INDEX=1; python -m src.modules.main "Your task here"
+   ```
+
+   Windows (CMD):
+
+   ```cmd
+   set MONITOR_INDEX=1 && python -m src.modules.main "Your task here"
+   ```
+
+   Specific window:
+
+   Linux/macOS:
+
+   ```bash
+   WINDOW_TITLE="Microsoft Edge" python -m src.modules.main "Your task here"
+   ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   $env:WINDOW_TITLE="Microsoft Edge"; python -m src.modules.main "Your task here"
+   ```
+
+   Windows (CMD):
+
+   ```cmd
+   set WINDOW_TITLE=Microsoft Edge && python -m src.modules.main "Your task here"
+   ```
+
+   **Windows Requirements:**
+
+   - Window capture requires `pywin32`: `pip install pywin32`
+   - Falls back to fullscreen if not installed
 
    Notes:
-   - You can also set `WINDOW_TITLE` in your .env file.
 
-   Or with a custom task:
-
-   ```
-   python -m src.modules.main "Open Chrome and search for OpenAI"
-   ```
+   - Press `b` during prompts to go back (interactive mode)
+   - `MONITOR_INDEX`: 0=all, 1=primary, 2=secondary, etc.
+   - Window mode automatically detects which monitor contains the window
 
 7. View logs
 
@@ -112,11 +172,32 @@ It is suggested to use a remote virtual environment for environment configuratio
    Logs include full prompts, responses, and token usage for all LLM calls.
 
 8. Reset memory
-   ```
+
+   Linux/macOS:
+
+   ```bash
    rm src/modules/memory/data/*.json
    rm src/modules/memory/data/*.npy
    rm src/modules/screen_input/screenshots/*.jpg
    rm src/modules/memory/task_log/*.log
+   ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   Remove-Item src/modules/memory/data/*.json
+   Remove-Item src/modules/memory/data/*.npy
+   Remove-Item src/modules/screen_input/screenshots/*.jpg
+   Remove-Item src/modules/memory/task_log/*.log
+   ```
+
+   Windows (CMD):
+
+   ```cmd
+   del src\modules\memory\data\*.json
+   del src\modules\memory\data\*.npy
+   del src\modules\screen_input\screenshots\*.jpg
+   del src\modules\memory\task_log\*.log
    ```
 
 ## Agent Architecture
@@ -232,19 +313,38 @@ flowchart TB
 
 ## Log
 
+### 25/10/2025
+
+- **Multi-monitor support**: Agent now works correctly with multiple monitors
+  - Fullscreen mode: Select specific monitor (0=all, 1=primary, 2=secondary, etc.)
+  - Window mode: Auto-detects which monitor contains the window, captures only that monitor
+  - Fixed coordinate mapping with monitor offsets for accurate clicks
+- **Window capture optimization**:
+  - Captures only window content (not full screen) for better resolution and token efficiency
+  - Fixed macOS window capture to use `CGRectNull` (was capturing all screens with `CGRectInfinite`)
+  - Window images maintain higher effective resolution when sent to LLM
+- **Interactive launcher** (`run_agent.sh`):
+  - Two-level menu: mode selection → monitor/window selection
+  - Dynamic monitor detection with resolution and position display
+  - "Back" option (`b`) at any prompt to return to main menu
+- **Improved logging**:
+  - Removed verbose window list spam (was printing 3 times)
+  - Cleaner output with single match confirmation
+  - Better error messages for window capture failures
+
 ### 23/10/2025
 
 - Unified window capture across Windows/macOS/Linux in a single API:
-   - Windows: Win32 PrintWindow for true background window capture; automatic fullscreen fallback if unavailable
-   - macOS: Quartz CGWindowListCreateImage for a specific window; automatic fullscreen fallback if unavailable
-   - Linux: Prefer `xwd` for window dump; fallback to `xwininfo` geometry + mss; automatic fullscreen fallback when tools are missing
+  - Windows: Win32 PrintWindow for true background window capture; automatic fullscreen fallback if unavailable
+  - macOS: Quartz CGWindowListCreateImage for a specific window; automatic fullscreen fallback if unavailable
+  - Linux: Prefer `xwd` for window dump; fallback to `xwininfo` geometry + mss; automatic fullscreen fallback when tools are missing
 - Added fuzzy window title matching (substring first, then fuzzy) and window list printing for easier selection
 - Added a new test case `src/modules/test/test_window_capture.py`
 - Agent now supports prioritized window capture when a title is configured via environment variable:
-   - `WINDOW_TITLE` (e.g., `$env:WINDOW_TITLE = "chrome"` on PowerShell)
-   - If not set, behavior remains fullscreen-only
+  - `WINDOW_TITLE` (e.g., `$env:WINDOW_TITLE = "chrome"` on PowerShell)
+  - If not set, behavior remains fullscreen-only
 - Requirements updated for macOS:
-   - Added `pyobjc-framework-Quartz; sys_platform == "darwin"` for macOS window capture
+  - Added `pyobjc-framework-Quartz; sys_platform == "darwin"` for macOS window capture
 - Linux system tools (optional, not in pip requirements): `wmctrl`, `xdotool`, `xwininfo`, `xwd`
 - Test of window capturing only done on WindowsOS
 

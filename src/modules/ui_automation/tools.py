@@ -28,8 +28,12 @@ def _center_of_box(box: List[float]) -> Tuple[float, float]:
 
 
 def _screen_size() -> Tuple[int, int]:
-    w, h = pyautogui.size()
-    return int(w), int(h)
+    """Get primary monitor size consistently across all platforms."""
+    import mss
+
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]  # 1 is the primary monitor
+        return monitor["width"], monitor["height"]
 
 
 def _denorm(nx: float, ny: float) -> Tuple[float, float]:

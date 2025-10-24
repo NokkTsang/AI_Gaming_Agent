@@ -19,20 +19,36 @@ if repo_root not in sys.path:
 print("Window Capture Test")
 print("=" * 80)
 
-# Try to get window title from argv
+# Try to get window title from argv, then env variable
 user_title = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else None
+if not user_title:
+    user_title = os.getenv("WINDOW_TITLE")
+
 
 def _pick_default_window() -> str | None:
-    """Enumerate top-level windows via Win32 and pick a reasonable default title."""
-    if not sys.platform.startswith("win"):
-        return None
+    """Enumerate top-level windows and pick a reasonable default title."""
+    # Windows
+    if sys.platform.startswith("win"):
+        return _pick_default_window_windows()
+    # macOS
+    elif sys.platform == "darwin":
+        return _pick_default_window_macos()
+    # Linux
+    else:
+        return _pick_default_window_linux()
+
+
+def _pick_default_window_windows() -> str | None:
+    """Windows-specific window enumeration."""
     try:
         import ctypes
         from ctypes import wintypes
 
         user32 = ctypes.windll.user32
         EnumWindows = user32.EnumWindows
-        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        EnumWindowsProc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, wintypes.HWND, wintypes.LPARAM
+        )
         IsWindowVisible = user32.IsWindowVisible
         GetWindowTextLengthW = user32.GetWindowTextLengthW
         GetWindowTextW = user32.GetWindowTextW
@@ -52,7 +68,12 @@ def _pick_default_window() -> str | None:
 
         EnumWindows(EnumWindowsProc(callback), 0)
         preferred = [
-            t for t in titles if any(k in t.lower() for k in ["code", "powershell", "terminal", "chrome", "notepad"])
+            t
+            for t in titles
+            if any(
+                k in t.lower()
+                for k in ["code", "powershell", "terminal", "chrome", "notepad"]
+            )
         ]
         if preferred:
             return preferred[0]
@@ -60,6 +81,77 @@ def _pick_default_window() -> str | None:
     except Exception as e:
         print(f"! Could not enumerate windows: {e}")
         return None
+
+
+def _pick_default_window_macos() -> str | None:
+    """macOS-specific window enumeration."""
+    try:
+        import Quartz
+
+        window_info_list = Quartz.CGWindowListCopyWindowInfo(
+            Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID
+        )
+        titles = []
+        for info in window_info_list or []:
+            owner = info.get(Quartz.kCGWindowOwnerName, "") or ""
+            name = info.get(Quartz.kCGWindowName, "") or ""
+            title = (f"{owner} - {name}" if owner and name else owner or name).strip()
+            if title:
+                titles.append(title)
+
+        preferred = [
+            t
+            for t in titles
+            if any(
+                k in t.lower()
+                for k in ["code", "terminal", "chrome", "safari", "edge", "kingdom"]
+            )
+        ]
+        if preferred:
+            return preferred[0]
+        return titles[0] if titles else None
+    except Exception as e:
+        print(f"! Could not enumerate windows: {e}")
+        return None
+
+
+def _pick_default_window_linux() -> str | None:
+    """Linux-specific window enumeration."""
+    try:
+        import subprocess
+        import shutil
+
+        if shutil.which("wmctrl"):
+            proc = subprocess.run(
+                ["wmctrl", "-l"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if proc.returncode == 0:
+                titles = []
+                for line in proc.stdout.splitlines():
+                    parts = line.split(None, 3)
+                    if len(parts) >= 4:
+                        title = parts[3].strip()
+                        if title:
+                            titles.append(title)
+                preferred = [
+                    t
+                    for t in titles
+                    if any(
+                        k in t.lower()
+                        for k in ["code", "terminal", "chrome", "firefox"]
+                    )
+                ]
+                if preferred:
+                    return preferred[0]
+                return titles[0] if titles else None
+        return None
+    except Exception as e:
+        print(f"! Could not enumerate windows: {e}")
+        return None
+
 
 if not user_title:
     auto_title = _pick_default_window()
