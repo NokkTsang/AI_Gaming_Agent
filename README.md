@@ -324,7 +324,7 @@ flowchart TB
   - Fixed macOS window capture to use `CGRectNull` (was capturing all screens with `CGRectInfinite`)
   - Window images maintain higher effective resolution when sent to LLM
 - **Interactive launcher** (`run_agent.sh`):
-  - Two-level menu: mode selection → monitor/window selection
+  - Two-level menus: mode selection → monitor/window selection
   - Dynamic monitor detection with resolution and position display
   - "Back" option (`b`) at any prompt to return to main menu
 - **Improved logging**:
