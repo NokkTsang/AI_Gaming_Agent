@@ -145,7 +145,10 @@ FOCUS STATE: Any field focused? (cursor blinking, highlighted border)
 → If focused, TYPE not CLICK
 
 UI ELEMENTS (interactive only):
-List each: type, appearance, coordinates [x,y] from DETECTED TEXT OR visual estimate, text, brief note
+List each: type, appearance, NORMALIZED coordinates [x,y] from DETECTED TEXT, text, brief note
+IMPORTANT: Use ONLY normalized [0,1] coordinates from OCR list. Do NOT estimate pixel coordinates.
+
+SPATIAL CONSTRAINTS: If obstacles/walls present, note safe zones.
 
 OBJECT DETECTION (for visual elements without text):
 If you see icons, markers, or game elements that need PRECISE coordinates, request detection:
@@ -308,6 +311,16 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 "reflection": [],
                 "completion_check": [],
             }
+
+            # Token usage tracking
+            token_counts = {
+                "vision": {"input": 0, "output": 0, "total": 0},
+                "planning": {"input": 0, "output": 0, "total": 0},
+                "task_breaking": {"input": 0, "output": 0, "total": 0},
+                "reflection": {"input": 0, "output": 0, "total": 0},
+                "completion_check": {"input": 0, "output": 0, "total": 0},
+            }
+
             task_start_time = time.time()
 
             while step < self.max_steps:
@@ -391,32 +404,63 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                         break
                     continue
 
-                print(f"  Action: {action_dict['action_type']}")
-                print(f"  Inputs: {action_dict['action_inputs']}")
-                print(f"  [Planning took {planning_time:.2f}s]\n")
+                # Handle action sequences (batch execution)
+                actions_to_execute = []
+                if "actions" in action_dict:
+                    # Multi-action sequence
+                    actions_to_execute = action_dict["actions"]
+                    print(f"  Action sequence: {len(actions_to_execute)} actions")
+                    for i, action in enumerate(actions_to_execute, 1):
+                        print(
+                            f"    {i}. {action['action_type']}({action['action_inputs']})"
+                        )
+                    print(f"  [Planning took {planning_time:.2f}s]\n")
+                else:
+                    # Single action
+                    actions_to_execute = [action_dict]
+                    print(f"  Action: {action_dict['action_type']}")
+                    print(f"  Inputs: {action_dict['action_inputs']}")
+                    print(f"  [Planning took {planning_time:.2f}s]\n")
 
                 # Check if finished
-                if action_dict["action_type"] == "finished":
+                if action_dict.get("action_type") == "finished" or (
+                    len(actions_to_execute) == 1
+                    and actions_to_execute[0].get("action_type") == "finished"
+                ):
                     print("✓ Task completed!")
                     break
 
-                # Record observation and screenshot before action
+                # Record observation and screenshot before actions
                 observation_before = current_observation
                 screenshot_before = screenshot_path
 
-                # Step 6: Execute action
-                print("  Executing action...")
+                # Step 6: Execute actions
+                print("  Executing action(s)...")
                 execution_start = time.time()
+                executed_count = 0
                 try:
-                    self.executor.execute(action_dict)
-                    self.short_term.add_action(action_dict)  # Store as dict, not string
+                    for action in actions_to_execute:
+                        self.executor.execute(action)
+                        self.short_term.add_action(action)  # Store each action
+                        executed_count += 1
+                        # Small delay between batched actions
+                        if len(actions_to_execute) > 1:
+                            time.sleep(0.1)
+
                     execution_time = time.time() - execution_start
                     step_timings["execution"].append(execution_time)
-                    print(f"  ✓ Action executed [took {execution_time:.2f}s]\n")
+                    if len(actions_to_execute) > 1:
+                        print(
+                            f"  ✓ {executed_count} actions executed [took {execution_time:.2f}s]\n"
+                        )
+                    else:
+                        print(f"  ✓ Action executed [took {execution_time:.2f}s]\n")
                 except Exception as e:
                     execution_time = time.time() - execution_start
                     step_timings["execution"].append(execution_time)
-                    print(f"  ⨯ Execution failed: {e} [took {execution_time:.2f}s]\n")
+                    print(
+                        f"  ⨯ Execution failed after {executed_count} actions: {e} [took {execution_time:.2f}s]\n"
+                    )
                     consecutive_failures += 1
                     if consecutive_failures >= max_failures:
                         break
@@ -445,7 +489,9 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     screenshot_before, screenshot_after
                 )
 
-                if not screen_changed and action_dict["action_type"] in [
+                # Check if last executed action was a click (for failure detection)
+                last_action = actions_to_execute[-1]
+                if not screen_changed and last_action.get("action_type") in [
                     "click",
                     "double_click",
                     "right_click",
@@ -522,25 +568,50 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     continue
 
                 # Normal observation after successful action
+                # Performance optimization: Skip vision analysis if screen unchanged
                 vision_start = time.time()
-                observation_prompt = (
-                    self.vision_system_prompt
-                    + f"\n\nPrevious state: {observation_before[:100]}...\n"
-                    + "Describe what changed after the action."
+
+                # Check if screen changed using pixel diff
+                # Use different thresholds: 0.001 (0.1%) for keyboard actions, 0.002 (0.2%) for clicks
+                last_action_type = (
+                    actions_to_execute[-1].get("action_type")
+                    if actions_to_execute
+                    else None
                 )
-                observation_after = analyze_screenshot_with_detection(
-                    screenshot_after,
-                    observation_prompt,
-                    model=self.vision_model,
-                    include_ocr=self.enable_ocr,
-                    enable_object_detection=self.enable_grounding_dino,
+                threshold = 0.001 if last_action_type in ["hotkey", "type"] else 0.002
+                screen_changed_final = self.compare_screenshots(
+                    screenshot_before, screenshot_after, threshold=threshold
                 )
-                vision_time = time.time() - vision_start
-                step_timings["vision"].append(vision_time)
-                self.short_term.add_observation(observation_after)
-                print(
-                    f"  New state: {observation_after[:150]}... [vision took {vision_time:.2f}s]\n"
-                )
+
+                if not screen_changed_final and step > 0:
+                    # Screen unchanged - reuse previous observation, skip expensive vision call
+                    observation_after = observation_before
+                    vision_time = time.time() - vision_start
+                    step_timings["vision"].append(vision_time)
+                    self.short_term.add_observation(observation_after)
+                    print(
+                        f"  Screen unchanged [threshold={threshold*100:.1f}%], reusing observation [saved ~40s]\n"
+                    )
+                else:
+                    # Screen changed or first iteration - run full vision analysis
+                    observation_prompt = (
+                        self.vision_system_prompt
+                        + f"\n\nPrevious state: {observation_before[:100]}...\n"
+                        + "Describe what changed after the action."
+                    )
+                    observation_after = analyze_screenshot_with_detection(
+                        screenshot_after,
+                        observation_prompt,
+                        model=self.vision_model,
+                        include_ocr=self.enable_ocr,
+                        enable_object_detection=self.enable_grounding_dino,
+                    )
+                    vision_time = time.time() - vision_start
+                    step_timings["vision"].append(vision_time)
+                    self.short_term.add_observation(observation_after)
+                    print(
+                        f"  New state: {observation_after[:150]}... [vision took {vision_time:.2f}s]\n"
+                    )
 
                 # Reset consecutive failures on successful action
                 consecutive_failures = 0
@@ -548,10 +619,22 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Step 8: Self-reflection
                 print("  Reflecting on outcome...")
                 reflection_start = time.time()
+
+                # Format action_taken string for reflection
+                if len(actions_to_execute) > 1:
+                    action_strs = [
+                        f"{a['action_type']}({a['action_inputs']})"
+                        for a in actions_to_execute
+                    ]
+                    action_taken = f"Action sequence: {', '.join(action_strs)}"
+                else:
+                    action = actions_to_execute[0]
+                    action_taken = f"{action['action_type']}({action['action_inputs']})"
+
                 success, reasoning = self.reflector.judge_action_success(
                     task_goal=task,
                     current_subtask=current_subtask,
-                    action_taken=f"{action_dict['action_type']}({action_dict['action_inputs']})",
+                    action_taken=action_taken,
                     observation_before=observation_before,
                     observation_after=observation_after,
                 )
@@ -711,6 +794,9 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 )
 
             print(f"\nLog saved to: {self.logger.get_log_path()}")
+            print(
+                f"Note: Token usage details are logged for each API call in the log file"
+            )
             print(f"{'='*80}\n")
 
         except KeyboardInterrupt:

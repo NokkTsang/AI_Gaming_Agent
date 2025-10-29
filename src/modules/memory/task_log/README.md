@@ -35,3 +35,27 @@ python -m src.modules.main "Your task description"
 ```
 
 The log file path is displayed at the start and end of each run.
+
+## Token Usage Analysis
+
+Use the `analyze_tokens.py` script to calculate total token usage and costs:
+
+```bash
+# From this directory:
+python3 analyze_tokens.py task_20251029_193919.log
+
+# From project root:
+python3 src/modules/memory/task_log/analyze_tokens.py src/modules/memory/task_log/task_20251029_193919.log
+```
+
+### Pricing (GPT-4.1)
+
+- **Input:** $3.00 per 1M tokens
+- **Output:** $12.00 per 1M tokens
+- **Cached Input:** $0.75 per 1M tokens (not tracked separately)
+
+The script provides:
+
+- Token breakdown by module (vision, planning, task breaking, reflection)
+- Total token counts (input/output/total)
+- Estimated cost based on GPT-4.1 pricing

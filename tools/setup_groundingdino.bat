@@ -3,6 +3,9 @@ REM Setup script for GroundingDINO object detection (Windows)
 
 echo Setting up GroundingDINO...
 
+REM Get the parent directory (project root)
+cd /d "%~dp0.."
+
 REM Activate virtual environment if it exists
 if exist ".venv\Scripts\activate.bat" (
     echo Activating virtual environment...

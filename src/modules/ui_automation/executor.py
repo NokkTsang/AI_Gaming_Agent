@@ -94,6 +94,7 @@ class ActionExecutor:
             "click",
             "left_single",
             "hover",
+            "move",
             "left_double",
             "right_single",
         }:
@@ -114,8 +115,11 @@ class ActionExecutor:
                 elif action_type == "right_single":
                     print(f"[DEBUG EXECUTOR] Executing RIGHT-CLICK")
                     self.automator.right_click(x, y)
+                elif action_type in {"move"}:
+                    print(f"[DEBUG EXECUTOR] Executing MOVE (smooth) to ({x}, {y})")
+                    self.automator.move(x, y, duration=0.5)
                 else:
-                    print(f"[DEBUG EXECUTOR] Executing MOVE (hover) to ({x}, {y})")
+                    print(f"[DEBUG EXECUTOR] Executing HOVER to ({x}, {y})")
                     self.automator.move_to(x, y)
 
         elif action_type in {"drag", "select"}:

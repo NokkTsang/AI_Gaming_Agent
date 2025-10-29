@@ -1,3 +1,34 @@
+### 29/10/2025
+
+- **Maze Navigation Intelligence**: Added directional awareness for maze/navigation games
+  - Vision prompt now calculates direction (UP/DOWN/LEFT/RIGHT) by comparing player position vs goal position
+  - Vision detects if player moved successfully or hit a wall
+  - Planner follows vision's directional guidance instead of random movements
+  - Added backtracking strategy: if hitting wall, try different direction
+  - Fixes issue where agent took random directions without spatial understanding (+150 tokens)
+- **Performance Optimizations**: Reduced loop time from 50s to 5-10s per planning cycle
+  - **Action Batching**: Agent can now output 3-5 actions in one planning cycle
+    - Planner supports multi-action format: `{"actions": [...]}`
+    - Main loop executes all actions in sequence with 0.1s delays
+    - Reduces iterations by 3-5x (e.g., 5 arrow presses = 1 iteration instead of 5)
+    - Token overhead: +75 tokens (+40 batching, +35 arrow key examples)
+  - **Screen Change Detection**: Skips expensive vision analysis when screen unchanged
+    - Pixel diff check with dynamic thresholds (0.1% keyboard, 0.2% clicks)
+    - Reuses previous observation if screen unchanged, saves ~40s per cached iteration
+    - Clear logging: "Screen unchanged [threshold=0.1%], reusing observation [saved ~40s]"
+  - **Bug Fixes**: Fixed 4 KeyError bugs where code accessed `action_dict['action_type']` without checking for action sequences
+- **Arrow Key Support**: Fixed critical bug where agent typed "up\n" instead of pressing arrow keys
+  - Added arrow key examples to planner prompt: `hotkey("up")`, `hotkey("down")`, etc.
+  - Added "Arrow keys: 'up', 'down', 'left', 'right'" to hotkey action description
+- **Token Tracking**: Created `analyze_tokens.py` script to parse logs and calculate costs at GPT-4.1 rates
+
+- **_To-do_**:
+  - Added conversation with the agent at first moment to make clear about the task
+  - The agent does not really know the direction of the maze, would it be possible for allowing the agent to write code functions to apply the searching algorithms like A\*?
+  - Always keep the agent being general. If it can play the [maze game](https://www.mysteinbach.ca/game-zone/1507/maze/), test if it still can search for terms using a broswer
+  - Is it better to include the cursor in the screenshot? Oscar will take care of it using the MacOS
+  - Should the agent include extra modules?
+
 ### 25/10/2025
 
 - **Multi-monitor support**: Agent now works correctly with multiple monitors

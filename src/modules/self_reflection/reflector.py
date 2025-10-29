@@ -124,6 +124,7 @@ Consider:
 - Did the UI change as expected?
 - Is the system state closer to the subtask goal?
 - Are there error messages or unexpected states?
+- Did screen reset to start/menu? (constraint violation)
 
 Respond with 'SUCCESS: [reason]' or 'FAILURE: [reason]'."""
 

@@ -26,13 +26,21 @@ class ActionPlanner:
 3. right_click(start_box=[x, y])
 4. drag(start_box=[x1, y1], end_box=[x2, y2])
 5. type(content="text") - Use \\n for Enter
-6. hotkey(key="cmd c") - Space-separated keys
+6. hotkey(key="cmd c") - Space-separated keys. Arrow keys: "up", "down", "left", "right"
 7. scroll(direction="up"/"down", start_box=[x, y])
 8. wait() - Wait 5 seconds
-9. finished(content="summary") - Task complete
+9. move(start_box=[x, y]) - Smooth cursor movement (for spatial constraints)
+10. finished(content="summary") - Task complete
 
 ## Coordinates
 Normalized [0,1]: [0,0]=top-left, [1,1]=bottom-right, [0.5,0.5]=center
+
+## Spatial Navigation
+For obstacles/walls: Use move (not click) with small steps through safe zones.
+
+## Action Batching for Games
+For keyboard-based games (arrow keys, WASD): Return 3-5 actions in sequence to reduce delays.
+Example: Moving through maze → plan multiple arrow key presses toward goal.
 
 ## Correction Feedback
 If "CLICK FAILED" with "COORDINATES: [x, y]" → USE those EXACT coordinates (vision analysis correction)
@@ -47,12 +55,15 @@ NEVER repeat same failed action >2 times.
 
 ## Output
 Valid JSON only:
-```json
-{"thought": "reasoning", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.8]}}
-```
+Single action: {"thought": "reasoning", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.8]}}
+Multiple actions: {"thought": "reasoning", "actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}]}
 
 ## Examples
 Click: {"thought": "Clicking START button", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.72]}}
+Arrow key: {"thought": "Moving player up", "action_type": "hotkey", "action_inputs": {"key": "up"}}
+Arrow sequence: {"thought": "Moving toward goal: up 3x then right 2x", "actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}]}
+Hotkey combo: {"thought": "Copy text", "action_type": "hotkey", "action_inputs": {"key": "cmd c"}}
+Move: {"thought": "Moving cursor through maze path", "action_type": "move", "action_inputs": {"start_box": [0.3, 0.5]}}
 Finished: {"thought": "Game loaded successfully", "action_type": "finished", "action_inputs": {"content": "Started Kingdom Rush"}}
 
 Return JSON only, no markdown.
@@ -139,7 +150,7 @@ Based on the current screen and task, what should be the next action? Return JSO
             return None
 
     def _parse_response(self, response_text: str) -> Optional[Dict[str, Any]]:
-        """Parse LLM response into action dictionary."""
+        """Parse LLM response into action dictionary or action sequence."""
         # Remove markdown code blocks if present
         response_text = re.sub(r"```json\s*", "", response_text)
         response_text = re.sub(r"```\s*", "", response_text)
@@ -148,7 +159,24 @@ Based on the current screen and task, what should be the next action? Return JSO
         try:
             data = json.loads(response_text)
 
-            # Validate required fields
+            # Check if this is a multi-action response
+            if "actions" in data:
+                # Validate it's a list of actions
+                if not isinstance(data["actions"], list):
+                    print("   Warning: 'actions' field must be a list")
+                    return None
+
+                # Validate each action has required fields
+                for action in data["actions"]:
+                    if "action_type" not in action:
+                        print("   Warning: Each action must have 'action_type'")
+                        return None
+                    if "action_inputs" not in action:
+                        action["action_inputs"] = {}
+
+                return data  # Return the full dict with "actions" list
+
+            # Single action response
             if "action_type" not in data:
                 return None
 

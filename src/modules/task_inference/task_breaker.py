@@ -45,7 +45,7 @@ Current Screen State:
 Requirements:
 - Each subtask should be concrete and achievable
 - Subtasks should be ordered logically
-- Keep subtasks high-level (don't specify exact clicks)
+- Keep subtasks high-level for UI tasks. For spatial obstacles, create waypoint sequence.
 - Focus on ACTIONS, not observations (avoid "review", "check", "verify", "observe")
 - Each subtask should change the system state or interact with UI
 - Final subtask should be the completion of the goal, not a verification step
@@ -56,6 +56,7 @@ GOOD examples:
 - "Navigate to settings menu"
 - "Enter username in login field"
 - "Submit the search query"
+- "Move cursor to waypoint at [0.3, 0.4]" (for spatial constraints)
 
 BAD examples (too vague):
 - "Review the search results" (what does review mean?)

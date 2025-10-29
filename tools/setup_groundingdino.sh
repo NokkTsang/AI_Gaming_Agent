@@ -3,6 +3,10 @@
 
 echo "Setting up GroundingDINO..."
 
+# Get the parent directory (project root)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 # Activate virtual environment if it exists
 if [ -d ".venv" ]; then
     echo "Activating virtual environment..."

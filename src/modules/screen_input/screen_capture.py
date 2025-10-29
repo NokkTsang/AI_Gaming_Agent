@@ -9,6 +9,7 @@ import io
 import subprocess
 import shutil
 import re
+import pyautogui
 
 # You may want to load these from your config system
 DEFAULT_OUTPUT_DIR = "src/modules/screen_input/screenshots"
@@ -16,6 +17,57 @@ FULLSCREEN = None
 
 
 _DPI_AWARE_SET = False
+
+
+def _draw_cursor_on_image(
+    image: Image.Image, region: Tuple[int, int, int, int]
+) -> Image.Image:
+    """Draw cursor on the captured image.
+
+    Args:
+        image: PIL Image to draw cursor on
+        region: (left, top, width, height) of the captured region
+
+    Returns:
+        Image with cursor drawn on it
+    """
+    try:
+        # Get current cursor position
+        cursor_x, cursor_y = pyautogui.position()
+
+        # Calculate cursor position relative to the captured region
+        region_left, region_top, region_width, region_height = region
+        rel_x = cursor_x - region_left
+        rel_y = cursor_y - region_top
+
+        # Check if cursor is within the captured region
+        if 0 <= rel_x < region_width and 0 <= rel_y < region_height:
+            # Draw cursor on image
+            draw = ImageDraw.Draw(image)
+
+            # Draw a simple cursor (triangle pointing up-left)
+            cursor_size = 15
+            cursor_points = [
+                (rel_x, rel_y),  # tip
+                (rel_x, rel_y + cursor_size),  # bottom
+                (rel_x + cursor_size * 0.6, rel_y + cursor_size * 0.6),  # right
+            ]
+
+            # Draw cursor with outline for visibility
+            draw.polygon(cursor_points, fill="white", outline="black", width=2)
+
+            print(
+                f"   Info: Drew cursor at screen position ({cursor_x}, {cursor_y}), image position ({rel_x}, {rel_y})"
+            )
+        else:
+            print(
+                f"   Info: Cursor at ({cursor_x}, {cursor_y}) is outside captured region"
+            )
+
+    except Exception as e:
+        print(f"   Warning: Failed to draw cursor: {e}")
+
+    return image
 
 
 def _ensure_windows_dpi_awareness():
@@ -625,6 +677,7 @@ def take_screenshot(
     focus_window: bool = False,
     method: str = "auto",  # 'auto' | 'printwindow'
     monitor_index: int = 1,  # 0=all, 1=primary, 2=secondary, etc.
+    draw_cursor: bool = True,  # Whether to draw cursor on screenshot
 ) -> Tuple[str, Tuple[int, int, int, int]]:
     """
     Capture a screenshot of the specified region and save as JPEG.
@@ -633,6 +686,7 @@ def take_screenshot(
         window_title: If provided, captures ONLY the window with black background (noise reduction)
         monitor_index: Which monitor to capture (0=all, 1=primary, 2=secondary)
         focus_window: Whether to focus the window before capturing
+        draw_cursor: Whether to draw cursor position on the screenshot (default: True)
 
     Returns:
         Tuple of (screenshot_path, (left, top, width, height) of captured region)
@@ -731,6 +785,10 @@ def take_screenshot(
                     print(f"   Warning: Could not get window bounds: {e}")
 
             if window_bounds:
+                # Draw cursor if requested
+                if draw_cursor:
+                    window_image = _draw_cursor_on_image(window_image, window_bounds)
+
                 window_image.save(screen_image_filename, "JPEG")
                 print(
                     f"   Info: Captured window only - position ({window_bounds[0]}, {window_bounds[1]}) size {window_bounds[2]}x{window_bounds[3]}"
@@ -739,9 +797,15 @@ def take_screenshot(
             else:
                 # Fallback: use image size and assume position (0, 0)
                 w, h = window_image.size
+                fallback_bounds = (0, 0, w, h)
+
+                # Draw cursor if requested
+                if draw_cursor:
+                    window_image = _draw_cursor_on_image(window_image, fallback_bounds)
+
                 window_image.save(screen_image_filename, "JPEG")
                 print(f"   Warning: Could not get window position, assuming (0, 0)")
-                return screen_image_filename, (0, 0, w, h)
+                return screen_image_filename, fallback_bounds
         else:
             # Window capture failed - this can happen if window is minimized or not accessible
             print(f"   ⚠️  ERROR: Could not capture window '{window_title}'")
@@ -780,6 +844,10 @@ def take_screenshot(
         draw.line((cx, 0, cx, height), fill="blue", width=3)
         draw.line((0, cy, width, cy), fill="blue", width=3)
         # Optionally add axis labels here
+
+    # Draw cursor if requested
+    if draw_cursor:
+        image = _draw_cursor_on_image(image, screen_region)
 
     image.save(screen_image_filename, "JPEG")
 

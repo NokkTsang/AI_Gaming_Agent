@@ -84,6 +84,13 @@ class UIAutomator:
     ) -> None:
         pyautogui.dragTo(x, y, duration=duration, button=button)
 
+    def move(self, x: float, y: float, duration: float = 0.5) -> None:
+        """Move cursor smoothly without clicking (for spatial navigation through constrained paths)."""
+        print(f"[DEBUG AUTOMATOR] move({x}, {y}, duration={duration})")
+        pyautogui.moveTo(x, y, duration=duration)
+        actual_pos = pyautogui.position()
+        print(f"[DEBUG AUTOMATOR] Move completed to: {actual_pos}")
+
     # ---- Keyboard ----
     def hotkey(self, *keys: str) -> None:
         pyautogui.hotkey(*keys)
