@@ -161,15 +161,19 @@ It is suggested to use a remote virtual environment for environment configuratio
    - `MONITOR_INDEX`: 0=all, 1=primary, 2=secondary, etc.
    - Window mode automatically detects which monitor contains the window
 
-7. View logs
+7. View logs and tokens
 
-   All terminal output is automatically saved to timestamped log files:
+   All terminal output is automatically saved to timestamped log files. Logs include full prompts, responses, and token usage for all LLM calls.
 
    ```
    src/modules/memory/task_log/task_YYYYMMDD_HHMMSS.log
    ```
 
-   Logs include full prompts, responses, and token usage for all LLM calls.
+   Check for tokens used. Remember to change the log name in line 143 in code.
+
+   ```
+   python src/modules/memory/task_log/analyze_tokens.py
+   ```
 
 8. Reset memory
 
