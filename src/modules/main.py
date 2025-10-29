@@ -748,7 +748,7 @@ def main():
     # ============================================================
     # CONFIGURATION: Edit these values to customize the agent
     # ============================================================
-    MODEL = "gpt-4.1"
+    MODEL = "gpt-4.1-nano"
     MAX_STEPS = 50
     MAX_SUBTASK_ATTEMPTS = 3  # Max attempts per subtask before skipping
     ENABLE_OCR = True  # OCR provides precise coordinates for text elements

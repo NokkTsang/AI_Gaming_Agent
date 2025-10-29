@@ -99,8 +99,9 @@ def extract_text_with_ocr(image_path: str) -> List[Dict[str, any]]:
             f"   OCR found {len(text_boxes)} high-confidence text elements (>0.5 confidence)"
         )
         for box in text_boxes[:10]:  # Show first 10
+            # Print with 3 significant figures for compactness
             print(
-                f"      '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}] (conf: {box['confidence']:.2f})"
+                f"      '{box['text']}' at [{box['x']:.3g}, {box['y']:.3g}] (conf: {box['confidence']:.3g})"
             )
 
         return text_boxes
@@ -183,7 +184,8 @@ def analyze_screenshot(
         if text_boxes:
             ocr_info = "\n\nDETECTED TEXT ELEMENTS:\n"
             for idx, box in enumerate(text_boxes[:20], 1):  # Limit to top 20
-                ocr_info += f"{idx}. '{box['text']}' at [{box['x']:.2f}, {box['y']:.2f}] (conf: {box['confidence']:.2f})\n"
+                # Use 3 significant figures for coordinates and confidence
+                ocr_info += f"{idx}. '{box['text']}' at [{box['x']:.3g}, {box['y']:.3g}] (conf: {box['confidence']:.3g})\n"
             enhanced_question = enhanced_question + ocr_info
             print(f"   Added {len(text_boxes[:20])} OCR text elements to vision prompt")
         else:
@@ -308,9 +310,10 @@ def analyze_screenshot_with_detection(
     # Phase 4: Re-analyze with annotated image
     detection_summary = "\n\nDETECTED OBJECTS:\n"
     for idx, det in enumerate(all_detections, 1):
+        # Use 3 significant figures for compact numeric output
         detection_summary += (
-            f"{idx}. {det['object']} at [{det['x']:.2f}, {det['y']:.2f}] "
-            f"(confidence: {det['confidence']:.2f})\n"
+            f"{idx}. {det['object']} at [{det['x']:.3g}, {det['y']:.3g}] "
+            f"(confidence: {det['confidence']:.3g})\n"
         )
 
     final_question = f"""{question}
