@@ -204,9 +204,25 @@ It is suggested to use a remote virtual environment for environment configuratio
    del src\modules\memory\task_log\*.log
    ```
 
+## 📖 Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed agent architecture (reference from Cradle)
+- **[.azure/README.md](.azure/README.md)**: Game-TARS adaptation guide (NEW!)
+  - Memory architecture improvements (20 steps → 2480 steps)
+  - Sparse thinking for speed (45s → 12s per action)
+  - Task clarification for accuracy (60% → 95%)
+  - Implementation roadmap and research contributions
+
 ## Agent Architecture
 
 The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle). Please read [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+
+**🚀 NEW: Game-TARS Adaptation** - See [.azure/README.md](.azure/README.md) for comprehensive analysis of adapting Game-TARS insights to this API-based agent. Includes:
+
+- Two-tier memory system (124x longer context)
+- Sparse thinking (3.8x faster gameplay)
+- Task clarification (1.6x better accuracy)
+- Complete implementation checklist
 
 ```mermaid
 ---

@@ -38,6 +38,11 @@ from modules.self_reflection.reflector import Reflector
 from modules.task_inference.task_breaker import TaskBreaker
 from modules.skill_curation.skill_manager import SkillManager
 
+# Game-TARS enhancements
+from modules.action_planning.complexity_detector import ComplexityDetector
+from modules.task_inference.task_clarifier import TaskClarifier
+from modules.task_inference.completion_detector import CompletionDetector
+
 # Load environment variables
 load_dotenv()
 
@@ -187,10 +192,21 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         self.reflector = Reflector(api_key=api_key, model=model)
         self.skill_manager = SkillManager(api_key=api_key, model=model)
 
+        # Game-TARS improvements
+        print("  Initializing Game-TARS enhancements...")
+        self.complexity_detector = ComplexityDetector(model=model, api_key=api_key)
+        self.task_clarifier = TaskClarifier(model=model, api_key=api_key)
+        self.completion_detector = CompletionDetector(model=model, api_key=api_key)
+
         # Action planner
         self.planner = ActionPlanner(model=model, api_key=api_key)
 
-        print("✓ Agent initialized successfully!\n")
+        print("✓ Agent initialized successfully!")
+        print("  - Two-tier memory: 80 full + 2400 compressed steps")
+        print("  - Sparse thinking: Reactive mode for simple actions")
+        print("  - Task clarification: Structured instructions")
+        print("  - Completion detection: Explicit validation")
+        print()
 
     def update_screen_size(self, screen_region: Tuple[int, int, int, int]):
         """Update screen size for executor based on actual captured region.
@@ -245,12 +261,26 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
             print(f"   Warning: Screenshot comparison failed: {e}")
             return True  # Assume change occurred if comparison fails
 
-    def run(self, task: str):
+    def run(
+        self,
+        task: str,
+        enable_sparse_thinking: bool = True,
+        enable_clarification: bool = True,
+    ):
         """
         Main agent loop - execute task with full memory and learning.
 
+        NOW WITH GAME-TARS IMPROVEMENTS:
+        - Task clarification with structured instructions
+        - Two-tier memory (80 full + 2400 compressed)
+        - Sparse thinking (reactive vs deliberative)
+        - Explicit completion detection
+        - Enhanced stuck detection with recovery
+
         Args:
             task: High-level task description
+            enable_sparse_thinking: Use complexity detection for speed (default: True)
+            enable_clarification: Clarify ambiguous tasks upfront (default: True)
         """
         # Start logging all output
         self.logger.start_logging()
@@ -258,9 +288,29 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         print(f"\n{'='*80}")
         print(f"Task: {task}")
         print(f"Log file: {self.logger.get_log_path()}")
+        print(
+            f"Enhancements: Sparse={enable_sparse_thinking}, Clarify={enable_clarification}"
+        )
         print(f"{'='*80}\n")
 
+        # Structured instruction (for completion detection)
+        instruction = None
+
         try:
+            # Step 0: Task Clarification (NEW - Game-TARS §3.1)
+            if enable_clarification:
+                print("Step 0: Task Clarification (Game-TARS Instruction Following)")
+                print("-" * 80)
+                # Note: We'll clarify before initial screenshot for now
+                # In production, you might want initial screenshot first
+                instruction = self.task_clarifier.clarify_task(
+                    task, "", auto_accept_unambiguous=True
+                )
+                # Update task with clarified goal
+                task = instruction.get("goal", task)
+                # CRITICAL: Pass structured instruction to planner
+                self.planner.structured_instruction = instruction
+
             # Step 1: Capture initial screen
             print("Step 1: Capturing initial screen...")
             # Capture screenshot and get the actual screen region for coordinate mapping
@@ -293,9 +343,19 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 print(f"    {i}. {st}")
             print()
 
-            # Step 3: Initialize short-term memory
+            # Step 3: Initialize short-term memory (NEW - Two-tier system)
+            print("Step 3: Initializing two-tier memory...")
             self.short_term.initialize_task(task, subtasks)
-            self.short_term.add_observation(initial_observation)
+            # Use new add_step instead of add_observation
+            self.short_term.add_step(
+                observation=initial_observation,
+                thought="Initial task analysis",
+                action={"action_type": "observe", "action_inputs": {}},
+            )
+            print(
+                f"  ✓ Memory: {self.short_term.max_context_steps} full + {self.short_term.max_summary_steps} compressed"
+            )
+            print()
 
             # Main execution loop
             step = 0
@@ -305,6 +365,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
             # Timing tracking for performance monitoring
             step_timings = {
+                "complexity_check": [],  # NEW
                 "vision": [],
                 "planning": [],
                 "execution": [],
@@ -312,16 +373,14 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 "completion_check": [],
             }
 
-            # Token usage tracking
-            token_counts = {
-                "vision": {"input": 0, "output": 0, "total": 0},
-                "planning": {"input": 0, "output": 0, "total": 0},
-                "task_breaking": {"input": 0, "output": 0, "total": 0},
-                "reflection": {"input": 0, "output": 0, "total": 0},
-                "completion_check": {"input": 0, "output": 0, "total": 0},
-            }
+            # Track sparse thinking stats
+            thinking_count = 0
+            reactive_count = 0
 
             task_start_time = time.time()
+
+            # For stuck detection
+            observation_history = [initial_observation]
 
             while step < self.max_steps:
                 step += 1
@@ -385,14 +444,59 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     recent_obs[-1]["content"] if recent_obs else initial_observation
                 )
 
-                # Step 5: Plan next action
-                print("  Planning next action...")
-                planning_start = time.time()
-                action_dict = self.planner.plan_next_action(
-                    task=task,
-                    observation=current_observation,
-                    action_history=context["recent_actions"],
+                # NEW: Step 4.5 - Complexity Detection (Game-TARS Sparse Thinking)
+                if enable_sparse_thinking:
+                    print("  Step 4.5: Complexity check (sparse thinking)...")
+                    complexity_start = time.time()
+
+                    last_obs = (
+                        observation_history[-1] if len(observation_history) > 0 else ""
+                    )
+                    last_action = (
+                        context["recent_actions"][-1]
+                        if context["recent_actions"]
+                        else None
+                    )
+
+                    needs_thinking, reason = self.complexity_detector.needs_thinking(
+                        current_observation=current_observation,
+                        last_observation=last_obs,
+                        current_subtask=current_subtask,
+                        last_action=last_action,
+                        action_history=context["recent_actions"],
+                        force_thinking=(step == 1),  # Always think on first step
+                    )
+
+                    complexity_time = time.time() - complexity_start
+                    step_timings["complexity_check"].append(complexity_time)
+                    print(f"  → {reason} [{complexity_time:.2f}s]")
+                else:
+                    needs_thinking = True  # Default to always thinking
+                    reason = "Sparse thinking disabled"
+
+                # Step 5: Plan next action (Deep or Reactive)
+                print(
+                    f"  Planning next action ({'DEEP' if needs_thinking else 'REACTIVE'})..."
                 )
+                planning_start = time.time()
+
+                if needs_thinking:
+                    # Deep planning: Full reasoning + action
+                    action_dict = self.planner.plan_next_action(
+                        task=current_subtask,
+                        observation=current_observation,
+                        action_history=context["recent_actions"],
+                    )
+                    thinking_count += 1
+                else:
+                    # Reactive planning: Action only (fast)
+                    action_dict = self.planner.plan_reactive_action(
+                        task=current_subtask,
+                        observation=current_observation,
+                        action_history=context["recent_actions"],
+                    )
+                    reactive_count += 1
+
                 planning_time = time.time() - planning_start
                 step_timings["planning"].append(planning_time)
 
@@ -422,13 +526,41 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     print(f"  Inputs: {action_dict['action_inputs']}")
                     print(f"  [Planning took {planning_time:.2f}s]\n")
 
-                # Check if finished
+                # NEW: Check if finished (with completion validation if instruction available)
                 if action_dict.get("action_type") == "finished" or (
                     len(actions_to_execute) == 1
                     and actions_to_execute[0].get("action_type") == "finished"
                 ):
-                    print("✓ Task completed!")
-                    break
+                    if instruction:
+                        # Validate completion against success criteria
+                        print("\n  Validating task completion...")
+                        completion_start = time.time()
+                        allow_finish, completion_reason = (
+                            self.completion_detector.validate_completion_action(
+                                instruction=instruction,
+                                observation=current_observation,
+                                action_history=self.short_term.state["actions"],
+                            )
+                        )
+                        completion_time = time.time() - completion_start
+                        step_timings["completion_check"].append(completion_time)
+
+                        if allow_finish:
+                            print(f"  ✓ {completion_reason}")
+                            print("✓ Task completed!")
+                            break
+                        else:
+                            print(f"  ✗ {completion_reason}")
+                            print(
+                                "  ⚠️  Rejected premature completion - continuing task"
+                            )
+                            # Don't execute the finished action, continue instead
+                            consecutive_failures += 1
+                            continue
+                    else:
+                        # No instruction available, trust agent's judgment
+                        print("✓ Task completed!")
+                        break
 
                 # Record observation and screenshot before actions
                 observation_before = current_observation
@@ -441,7 +573,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 try:
                     for action in actions_to_execute:
                         self.executor.execute(action)
-                        self.short_term.add_action(action)  # Store each action
+                        # Note: Actions will be stored with add_step() after observation
                         executed_count += 1
                         # Small delay between batched actions
                         if len(actions_to_execute) > 1:
@@ -559,11 +691,17 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     print(
                         f"  Correction suggestion:\n{correction_observation}\n"
                     )  # Let the agent retry in next iteration with this new information
-                    self.short_term.add_observation(
+
+                    # Store failed attempt with correction using add_step
+                    failed_observation = (
                         f"CLICK FAILED at {action_dict['action_inputs'].get('start_box')}. "
                         + f"Correction analysis:\n{correction_observation}\n"
                         + "Use the EXACT coordinates provided above in your next attempt."
                     )
+                    thought = action_dict.get("thought", "Failed click attempt")
+                    self.short_term.add_step(failed_observation, thought, action_dict)
+                    observation_history.append(failed_observation)
+
                     consecutive_failures += 1
                     continue
 
@@ -588,7 +726,12 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     observation_after = observation_before
                     vision_time = time.time() - vision_start
                     step_timings["vision"].append(vision_time)
-                    self.short_term.add_observation(observation_after)
+
+                    # Store with add_step (observation, thought, action)
+                    thought = action_dict.get("thought", "Action continuation")
+                    self.short_term.add_step(observation_after, thought, action_dict)
+                    observation_history.append(observation_after)
+
                     print(
                         f"  Screen unchanged [threshold={threshold*100:.1f}%], reusing observation [saved ~40s]\n"
                     )
@@ -608,7 +751,12 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     )
                     vision_time = time.time() - vision_start
                     step_timings["vision"].append(vision_time)
-                    self.short_term.add_observation(observation_after)
+
+                    # Store with add_step (observation, thought, action)
+                    thought = action_dict.get("thought", "Action with new observation")
+                    self.short_term.add_step(observation_after, thought, action_dict)
+                    observation_history.append(observation_after)
+
                     print(
                         f"  New state: {observation_after[:150]}... [vision took {vision_time:.2f}s]\n"
                     )
@@ -640,6 +788,45 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 )
                 reflection_time = time.time() - reflection_start
                 step_timings["reflection"].append(reflection_time)
+
+                # Step 8.5: Check for stuck state with recovery (Game-TARS enhancement)
+                if len(self.short_term.state["actions"]) >= 5:
+                    print("  Checking for stuck patterns...")
+                    stuck_start = time.time()
+                    is_stuck, stuck_reason, recovery_actions = (
+                        self.reflector.detect_stuck_with_recovery(
+                            action_history=self.short_term.state["actions"],
+                            observation_history=observation_history,
+                            window_size=5,
+                        )
+                    )
+                    stuck_time = time.time() - stuck_start
+
+                    if is_stuck:
+                        print(f"  ⚠️  STUCK DETECTED: {stuck_reason}")
+                        print(
+                            f"  Attempting recovery: {len(recovery_actions)} action(s)"
+                        )
+
+                        # Execute recovery actions
+                        for i, recovery_action in enumerate(recovery_actions, 1):
+                            print(
+                                f"    Recovery {i}: {recovery_action['action_type']}({recovery_action['action_inputs']})"
+                            )
+                            try:
+                                self.executor.execute(recovery_action)
+                                time.sleep(0.5)
+                            except Exception as e:
+                                print(f"    ⨯ Recovery action failed: {e}")
+
+                        print(
+                            f"  ✓ Recovery attempted [check took {stuck_time:.2f}s]\n"
+                        )
+                        consecutive_failures = 0  # Reset after recovery attempt
+                    else:
+                        print(
+                            f"  ✓ No stuck pattern detected [check took {stuck_time:.2f}s]"
+                        )
 
                 if success:
                     print(
@@ -793,6 +980,62 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     f"  Completion checks: {len(step_timings['completion_check'])} calls, avg {avg_completion:.2f}s, total {sum(step_timings['completion_check']):.2f}s"
                 )
 
+            # Game-TARS Enhancement Statistics
+            print(f"\n{'='*80}")
+            print("GAME-TARS ENHANCEMENT STATISTICS")
+            print(f"{'='*80}")
+
+            # Two-tier memory statistics
+            mem_stats = self.short_term.get_memory_stats()
+            print(f"Two-Tier Memory:")
+            print(
+                f"  Context memory: {mem_stats['context_steps']}/{mem_stats['context_limit']} steps"
+            )
+            print(
+                f"  Summary memory: {mem_stats['summary_steps']}/{mem_stats['summary_limit']} steps"
+            )
+            print(
+                f"  Total capacity: {mem_stats['context_steps'] + mem_stats['summary_steps']}/{mem_stats['context_limit'] + mem_stats['summary_limit']} steps (vs 20 baseline)"
+            )
+
+            # Sparse thinking statistics (if enabled)
+            if enable_sparse_thinking and (thinking_count + reactive_count) > 0:
+                total_actions = thinking_count + reactive_count
+                thinking_rate = thinking_count / total_actions * 100
+                reactive_rate = reactive_count / total_actions * 100
+                print(f"\nSparse Thinking:")
+                print(
+                    f"  Deep reasoning: {thinking_count} actions ({thinking_rate:.1f}%)"
+                )
+                print(
+                    f"  Reactive (fast): {reactive_count} actions ({reactive_rate:.1f}%)"
+                )
+                print(
+                    f"  Expected speedup: ~{1 / (thinking_rate/100 + reactive_rate/100 * 0.15):.1f}x"
+                )
+
+                # Complexity check performance
+                if step_timings.get("complexity_check"):
+                    avg_complexity = sum(step_timings["complexity_check"]) / len(
+                        step_timings["complexity_check"]
+                    )
+                    print(
+                        f"  Complexity checks: {len(step_timings['complexity_check'])} calls, avg {avg_complexity:.2f}s"
+                    )
+
+            # Task clarification (if enabled)
+            if enable_clarification and instruction:
+                print(f"\nTask Clarification:")
+                print(f"  Structured instruction generated: Yes")
+                print(
+                    f"  Success criteria defined: {len(instruction.get('success_criteria', []))} criteria"
+                )
+                print(
+                    f"  Constraints specified: {len(instruction.get('constraints', []))} constraints"
+                )
+
+            print(f"{'='*80}")
+
             print(f"\nLog saved to: {self.logger.get_log_path()}")
             print(
                 f"Note: Token usage details are logged for each API call in the log file"
@@ -834,20 +1077,27 @@ def main():
     # ============================================================
     # CONFIGURATION: Edit these values to customize the agent
     # ============================================================
+    WINDOW_TITLE = None  # Set to None to list windows, or "Your Game" to auto-select
     MODEL = "gpt-4.1-nano"
     MAX_STEPS = 50
-    MAX_SUBTASK_ATTEMPTS = 3  # Max attempts per subtask before skipping
-    ENABLE_OCR = True  # OCR provides precise coordinates for text elements
-    ENABLE_GROUNDING_DINO = (
-        True  # GroundingDINO provides precise coordinates for visual elements
-    )
+    MAX_SUBTASK_ATTEMPTS = 3
+    ENABLE_OCR = True
+    ENABLE_GROUNDING_DINO = True
+    ENABLE_SPARSE_THINKING = True  # 3-4x speedup (recommended)
+    ENABLE_CLARIFICATION = True  # Task Q&A (optional)
     # ============================================================
+
+    # Set window title in environment (for window selection)
+    if WINDOW_TITLE:
+        os.environ["WINDOW_TITLE"] = WINDOW_TITLE
 
     print(f"Using model: {MODEL}")
     print(f"Max steps per task: {MAX_STEPS}")
     print(f"Max attempts per subtask: {MAX_SUBTASK_ATTEMPTS}")
     print(f"OCR enabled: {ENABLE_OCR}")
-    print(f"GroundingDINO enabled: {ENABLE_GROUNDING_DINO}\n")
+    print(f"GroundingDINO enabled: {ENABLE_GROUNDING_DINO}")
+    print(f"Sparse thinking: {ENABLE_SPARSE_THINKING}")
+    print(f"Task clarification: {ENABLE_CLARIFICATION}\n")
 
     agent = AIGamingAgent(
         max_steps=MAX_STEPS,
@@ -855,8 +1105,12 @@ def main():
         enable_ocr=ENABLE_OCR,
         enable_grounding_dino=ENABLE_GROUNDING_DINO,
     )
-    agent.max_subtask_attempts = MAX_SUBTASK_ATTEMPTS  # Pass config to agent
-    agent.run(task)
+    agent.max_subtask_attempts = MAX_SUBTASK_ATTEMPTS
+    agent.run(
+        task=task,
+        enable_sparse_thinking=ENABLE_SPARSE_THINKING,
+        enable_clarification=ENABLE_CLARIFICATION,
+    )
 
 
 if __name__ == "__main__":

@@ -1,10 +1,12 @@
 """
 Self-reflection module for judging action success/failure.
 Uses LLM to compare before/after observations and determine outcome.
+Enhanced with stuck detection and recovery suggestions.
 """
 
 import os
-from typing import Dict, Tuple
+import json
+from typing import Dict, Tuple, List
 from openai import OpenAI
 
 
@@ -159,3 +161,168 @@ Respond with 'SUCCESS: [reason]' or 'FAILURE: [reason]'."""
                 return True, "Alternating between two actions"
 
         return False, "Actions appear varied"
+
+    def detect_stuck_with_recovery(
+        self,
+        action_history: List[Dict],
+        observation_history: List[str],
+        window_size: int = 5,
+    ) -> Tuple[bool, str, List[Dict]]:
+        """
+        Enhanced stuck detection with recovery action suggestions.
+
+        Detects:
+        1. Same action repeated multiple times
+        2. Screen unchanged for multiple actions
+        3. Oscillating between two actions
+        4. Semantic stuck patterns (via LLM)
+
+        Args:
+            action_history: Full action history
+            observation_history: Full observation history
+            window_size: Number of recent steps to check
+
+        Returns:
+            (is_stuck: bool, reason: str, recovery_actions: List[Dict])
+        """
+        if len(action_history) < window_size:
+            return False, "Not enough history", []
+
+        recent_actions = action_history[-window_size:]
+        recent_obs = (
+            observation_history[-window_size:]
+            if len(observation_history) >= window_size
+            else observation_history
+        )
+
+        # Check 1: Same action repeated
+        action_strs = [str(a) for a in recent_actions]
+        if len(set(action_strs)) == 1:
+            recovery = [
+                {"action_type": "wait", "action_inputs": {}},
+                {"action_type": "hotkey", "action_inputs": {"key": "esc"}},
+            ]
+            return True, f"Repeated same action {window_size}x", recovery
+
+        # Check 2: Screen unchanged (compare first 200 chars)
+        if recent_obs:
+            obs_samples = [obs[:200] for obs in recent_obs]
+            if len(set(obs_samples)) == 1:
+                recovery = [
+                    {
+                        "action_type": "click",
+                        "action_inputs": {"start_box": [0.5, 0.5]},
+                    },
+                    {"action_type": "hotkey", "action_inputs": {"key": "enter"}},
+                ]
+                return True, "Screen unchanged for 5 actions", recovery
+
+        # Check 3: Oscillating between two actions
+        if window_size >= 4:
+            if action_strs[0] == action_strs[2] and action_strs[1] == action_strs[3]:
+                recovery = [
+                    {"action_type": "wait", "action_inputs": {}},
+                    {"action_type": "hotkey", "action_inputs": {"key": "esc"}},
+                ]
+                return True, "Oscillating between 2 actions", recovery
+
+        # Check 4: Use LLM for semantic stuck detection
+        if len(recent_actions) >= 5:
+            stuck, reason, recovery = self._llm_stuck_detection(
+                recent_actions, recent_obs
+            )
+            if stuck:
+                return stuck, reason, recovery
+
+        return False, "Agent progressing normally", []
+
+    def _llm_stuck_detection(
+        self, recent_actions: List[Dict], recent_obs: List[str]
+    ) -> Tuple[bool, str, List[Dict]]:
+        """
+        Use LLM to detect semantic stuck patterns.
+        """
+        actions_text = "\n".join(
+            [
+                f"{i+1}. {a.get('action_type')}({a.get('action_inputs', {})})"
+                for i, a in enumerate(recent_actions)
+            ]
+        )
+
+        obs_text = "\n".join(
+            [
+                f"{i+1}. {obs[:150]}..."
+                for i, obs in enumerate(recent_obs[:3])  # Show first 3
+            ]
+        )
+
+        prompt = f"""Recent actions (last 5):
+{actions_text}
+
+Recent observations (first 3):
+{obs_text}
+
+Is the agent STUCK in an ineffective loop?
+
+STUCK indicators:
+- Repeating same failed action
+- Not making progress toward goal
+- Clicking same unresponsive element
+- Going in circles
+
+PROGRESSING indicators:
+- Actions are varied
+- Observations are changing
+- Moving toward goal
+
+Respond in JSON:
+{{
+  "stuck": true/false,
+  "reason": "brief explanation",
+  "recovery_action": "suggested action type (wait/esc/enter/click_different)"
+}}"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=150,
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            result_text = result_text.replace("```json", "").replace("```", "").strip()
+
+            result = json.loads(result_text)
+
+            if result.get("stuck", False):
+                recovery_action_type = result.get("recovery_action", "wait")
+
+                # Map recovery action to actual action dict
+                recovery_map = {
+                    "wait": {"action_type": "wait", "action_inputs": {}},
+                    "esc": {"action_type": "hotkey", "action_inputs": {"key": "esc"}},
+                    "enter": {
+                        "action_type": "hotkey",
+                        "action_inputs": {"key": "enter"},
+                    },
+                    "click_different": {
+                        "action_type": "click",
+                        "action_inputs": {"start_box": [0.3, 0.3]},
+                    },
+                }
+
+                recovery = [
+                    recovery_map.get(recovery_action_type, recovery_map["wait"])
+                ]
+                return (
+                    True,
+                    result.get("reason", "LLM detected stuck pattern"),
+                    recovery,
+                )
+
+            return False, "LLM: Agent progressing", []
+
+        except Exception as e:
+            # On error, assume not stuck
+            return False, f"LLM check failed: {e}", []
