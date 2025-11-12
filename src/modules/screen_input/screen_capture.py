@@ -712,7 +712,8 @@ def take_screenshot(
         if sys.platform == "darwin":
             window_image = _capture_window_macos(window_title)
         elif sys.platform.startswith("win"):
-            if method == "printwindow":
+            # For Windows, try PrintWindow when method is 'auto' or 'printwindow'
+            if method in ("auto", "printwindow"):
                 window_image = _capture_window_printwindow(window_title)
         elif sys.platform.startswith("linux"):
             window_image = _capture_window_linux(window_title)
@@ -745,15 +746,36 @@ def take_screenshot(
             elif sys.platform.startswith("win"):
                 try:
                     import win32gui
+                    import ctypes
+                    from ctypes import wintypes
 
                     hwnd = _select_window_by_title(window_title, verbose=False)
                     if hwnd:
-                        rect = win32gui.GetWindowRect(hwnd)
+                        # Use DWM extended frame bounds to stay consistent with PrintWindow capture
+                        try:
+                            DWMWA_EXTENDED_FRAME_BOUNDS = 9
+                            rect = wintypes.RECT()
+                            ctypes.windll.dwmapi.DwmGetWindowAttribute(
+                                hwnd,
+                                DWMWA_EXTENDED_FRAME_BOUNDS,
+                                ctypes.byref(rect),
+                                ctypes.sizeof(rect),
+                            )
+                            left, top, right, bottom = (
+                                rect.left,
+                                rect.top,
+                                rect.right,
+                                rect.bottom,
+                            )
+                        except Exception:
+                            # Fallback to classic window rect if DWM not available
+                            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+
                         window_bounds = (
-                            rect[0],
-                            rect[1],
-                            rect[2] - rect[0],
-                            rect[3] - rect[1],
+                            int(left),
+                            int(top),
+                            int(right - left),
+                            int(bottom - top),
                         )
                 except Exception as e:
                     print(f"   Warning: Could not get window bounds: {e}")
@@ -807,15 +829,15 @@ def take_screenshot(
                 print(f"   Warning: Could not get window position, assuming (0, 0)")
                 return screen_image_filename, fallback_bounds
         else:
-            # Window capture failed - this can happen if window is minimized or not accessible
-            print(f"   ⚠️  ERROR: Could not capture window '{window_title}'")
+            # Window capture failed - fall back to fullscreen instead of raising
+            print(f"   ⚠️  ERROR: Could not capture window '{window_title}', falling back to fullscreen")
             print(f"   Possible causes:")
             print(f"     - Window is minimized")
             print(f"     - Window name changed")
             print(
                 f"     - macOS permissions issue (System Settings → Privacy → Screen Recording)"
             )
-            raise RuntimeError(f"Window capture failed for '{window_title}'")
+            # Do not return/raise; continue to fullscreen section below
 
     # Fullscreen mode: use specified monitor_index
     if screen_region is FULLSCREEN:
