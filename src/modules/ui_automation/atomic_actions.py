@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Optional, Tuple, Dict, Any
 
@@ -102,6 +103,36 @@ class UIAutomator:
         pyautogui.keyUp(key)
 
     def type_text(self, text: str, interval: float = 0.02) -> None:
+        """Type text with robustness options.
+
+        Behavior can be tuned via env vars:
+          - TYPE_INTERVAL: override per-char delay (seconds, e.g., 0.05)
+          - USE_CLIPBOARD_PASTE=1: paste via clipboard (pyperclip) instead of per-char typing
+        """
+        # Allow overriding typing interval from environment
+        try:
+            env_interval = os.getenv("TYPE_INTERVAL")
+            if env_interval:
+                interval = float(env_interval)
+        except Exception:
+            pass
+
+        use_clipboard = os.getenv("USE_CLIPBOARD_PASTE", "0") == "1"
+
+        if use_clipboard:
+            try:
+                import pyperclip  # optional dependency
+
+                pyperclip.copy(text)
+                # A tiny wait to ensure clipboard is ready
+                time.sleep(0.05)
+                pyautogui.hotkey("ctrl", "v")
+                return
+            except Exception as e:
+                print(
+                    f"[DEBUG AUTOMATOR] Clipboard paste unavailable/failure ({e}); falling back to per-char typing"
+                )
+
         pyautogui.write(text, interval=interval)
 
     # ---- Scroll ----
