@@ -1,10 +1,9 @@
 """
-Window capture test: captures a specified window (or auto-selected one) using
-Windows PrintWindow API (background-capable) when available; otherwise falls
-back to fullscreen. Saves images under src/modules/test with timestamped filenames.
+Window capture test: Lists available windows and allows user to select one to capture,
+or captures fullscreen if no selection is made.
 
 Run from project root:
-    python -m src.modules.test.test_window_capture [optional_window_title]
+    python -m src.modules.test.test_window_capture
 """
 
 import os
@@ -19,26 +18,21 @@ if repo_root not in sys.path:
 print("Window Capture Test")
 print("=" * 80)
 
-# Try to get window title from argv, then env variable
-user_title = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else None
-if not user_title:
-    user_title = os.getenv("WINDOW_TITLE")
 
-
-def _pick_default_window() -> str | None:
-    """Enumerate top-level windows and pick a reasonable default title."""
+def _enumerate_windows() -> list[tuple[int, str]]:
+    """Enumerate all visible windows and return list of (id, title) tuples."""
     # Windows
     if sys.platform.startswith("win"):
-        return _pick_default_window_windows()
+        return _enumerate_windows_windows()
     # macOS
     elif sys.platform == "darwin":
-        return _pick_default_window_macos()
+        return _enumerate_windows_macos()
     # Linux
     else:
-        return _pick_default_window_linux()
+        return _enumerate_windows_linux()
 
 
-def _pick_default_window_windows() -> str | None:
+def _enumerate_windows_windows() -> list[tuple[int, str]]:
     """Windows-specific window enumeration."""
     try:
         import ctypes
@@ -53,7 +47,7 @@ def _pick_default_window_windows() -> str | None:
         GetWindowTextLengthW = user32.GetWindowTextLengthW
         GetWindowTextW = user32.GetWindowTextW
 
-        titles = []
+        results = []
 
         def callback(hwnd, lParam):
             if IsWindowVisible(hwnd):
@@ -63,27 +57,18 @@ def _pick_default_window_windows() -> str | None:
                     GetWindowTextW(hwnd, buf, length + 1)
                     title = buf.value.strip()
                     if title:
-                        titles.append(title)
+                        results.append((int(hwnd), title))
             return True
 
         EnumWindows(EnumWindowsProc(callback), 0)
-        preferred = [
-            t
-            for t in titles
-            if any(
-                k in t.lower()
-                for k in ["code", "powershell", "terminal", "chrome", "notepad"]
-            )
-        ]
-        if preferred:
-            return preferred[0]
-        return titles[0] if titles else None
+        return results
     except Exception as e:
         print(f"! Could not enumerate windows: {e}")
-        return None
+        return []
 
 
-def _pick_default_window_macos() -> str | None:
+
+def _enumerate_windows_macos() -> list[tuple[int, str]]:
     """macOS-specific window enumeration."""
     try:
         import Quartz
@@ -91,36 +76,27 @@ def _pick_default_window_macos() -> str | None:
         window_info_list = Quartz.CGWindowListCopyWindowInfo(
             Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID
         )
-        titles = []
+        results = []
         for info in window_info_list or []:
+            wid = info.get(Quartz.kCGWindowNumber)
             owner = info.get(Quartz.kCGWindowOwnerName, "") or ""
             name = info.get(Quartz.kCGWindowName, "") or ""
             title = (f"{owner} - {name}" if owner and name else owner or name).strip()
-            if title:
-                titles.append(title)
-
-        preferred = [
-            t
-            for t in titles
-            if any(
-                k in t.lower()
-                for k in ["code", "terminal", "chrome", "safari", "edge", "kingdom"]
-            )
-        ]
-        if preferred:
-            return preferred[0]
-        return titles[0] if titles else None
+            if wid and title:
+                results.append((int(wid), title))
+        return results
     except Exception as e:
         print(f"! Could not enumerate windows: {e}")
-        return None
+        return []
 
 
-def _pick_default_window_linux() -> str | None:
+def _enumerate_windows_linux() -> list[tuple[str, str]]:
     """Linux-specific window enumeration."""
     try:
         import subprocess
         import shutil
 
+        results = []
         if shutil.which("wmctrl"):
             proc = subprocess.run(
                 ["wmctrl", "-l"],
@@ -129,40 +105,38 @@ def _pick_default_window_linux() -> str | None:
                 text=True,
             )
             if proc.returncode == 0:
-                titles = []
                 for line in proc.stdout.splitlines():
                     parts = line.split(None, 3)
                     if len(parts) >= 4:
+                        wid_hex = parts[0]
                         title = parts[3].strip()
                         if title:
-                            titles.append(title)
-                preferred = [
-                    t
-                    for t in titles
-                    if any(
-                        k in t.lower()
-                        for k in ["code", "terminal", "chrome", "firefox"]
-                    )
-                ]
-                if preferred:
-                    return preferred[0]
-                return titles[0] if titles else None
-        return None
+                            results.append((wid_hex, title))
+        return results
     except Exception as e:
         print(f"! Could not enumerate windows: {e}")
-        return None
+        return []
 
-
-if not user_title:
-    auto_title = _pick_default_window()
-    if auto_title:
-        print(f"No window title provided. Auto-selected: '{auto_title}'")
-        user_title = auto_title
-    else:
-        print("No window title provided and no windows detected. Exiting.")
-        sys.exit(1)
 
 from src.modules.screen_input.screen_capture import take_screenshot
+
+# List available windows
+print("\n🪟 Available windows:")
+windows = _enumerate_windows()
+
+if windows:
+    for idx, (wid, title) in enumerate(windows[:20], 1):
+        print(f"   {idx}. {title}")
+else:
+    print("   No windows detected")
+
+# Prompt user for selection
+print("\n📋 Select a window to capture:")
+if windows:
+    print(f"   - Enter window number (1-{len(windows[:20])})")
+print("   - Press ENTER for full screen capture")
+
+user_input = input("\nYour choice: ").strip()
 
 # Prepare output dir and timestamp
 output_dir = os.path.join(repo_root, "src", "modules", "test")
@@ -171,34 +145,45 @@ stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 saved_paths = []
 
-print(f"\nTarget window: {user_title}")
-
-"""Try background-capable capture first (auto/printwindow), then full."""
-
-# Auto/printwindow attempt first (Windows background-capable if pywin32 installed)
-try:
-    path_auto = take_screenshot(
-        tid=f"{stamp}_auto",
-        output_dir=output_dir,
-        window_title=user_title,
-        method="auto",
-        focus_window=False,
-    )
-    saved_paths.append(("auto", path_auto))
-    print(f"✅ Saved (auto): {path_auto}")
-except Exception as e:
-    print(f"❌ Auto method failed: {e}")
-
-# Full screen as fallback
-try:
-    path_full = take_screenshot(tid=f"{stamp}_full", output_dir=output_dir)
-    saved_paths.append(("fullscreen", path_full))
-    print(f"✅ Saved (fullscreen fallback): {path_full}")
-except Exception as e:
-    print(f"❌ Fullscreen fallback failed: {e}")
+# Determine capture target
+if user_input and user_input.isdigit() and windows:
+    idx = int(user_input) - 1
+    if 0 <= idx < len(windows[:20]):
+        _, window_title = windows[idx]
+        print(f"\n📸 Capturing window: {window_title}")
+        
+        try:
+            path_window, _ = take_screenshot(
+                tid=f"{stamp}_window",
+                output_dir=output_dir,
+                window_title=window_title,
+                method="auto",
+                focus_window=True
+            )
+            saved_paths.append(("window", path_window))
+            print(f"✅ Saved: {path_window}")
+        except Exception as e:
+            print(f"❌ Window capture failed: {e}")
+    else:
+        print(f"❌ Invalid selection: {user_input}")
+else:
+    # Full screen capture
+    print("\n📸 Capturing full screen...")
+    try:
+        path_full, _ = take_screenshot(
+            tid=f"{stamp}_fullscreen",
+            output_dir=output_dir
+        )
+        saved_paths.append(("fullscreen", path_full))
+        print(f"✅ Saved: {path_full}")
+    except Exception as e:
+        print(f"❌ Fullscreen capture failed: {e}")
 
 print("\nSummary:")
-for kind, p in saved_paths:
-    print(f"  - {kind}: {p}")
+if saved_paths:
+    for kind, p in saved_paths:
+        print(f"  - {kind}: {p}")
+else:
+    print("  No screenshots captured")
 
 print("\nDone.")
