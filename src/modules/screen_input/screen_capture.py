@@ -420,8 +420,12 @@ def focus_window_by_title(title_substring: str) -> bool:
             if not hwnd:
                 return False
 
-            # Bring window to foreground
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            # Check if window is minimized, if so restore it
+            # But don't restore if it's already maximized or normal
+            if win32gui.IsIconic(hwnd):
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            
+            # Bring window to foreground without changing its size
             win32gui.SetForegroundWindow(hwnd)
             print(f"   Info: Focused window '{title_substring}'")
             return True
