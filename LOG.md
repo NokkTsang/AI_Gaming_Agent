@@ -1,55 +1,60 @@
-```markdown
 ### 13/11/2025
-- **Three-Stage Vision Pipeline Architecture**:
+- **Three-Agent Architecture** (VLM → DINO → LLM):
   
-  **Stage 1 - VLM (Vision-Language Model): High-Level Analysis**
+  **Agent 1: VLM Agent (Vision-Language Model)**
   - **Input**: Screenshot
-  - **Task**: Analyze overall content to understand game rules, objectives, and visual semantics
-  - **Output**: 
-    - Game understanding (e.g., "This is a maze game where red=player, green=exit, black=walls, white=paths")
-    - Specific detection prompt for Stage 2 (e.g., "Detect positions of: player (red square), exit (green square), walls (black), paths (white)")
+  - **Outputs to**:
+    - **→ GroundingDINO Agent**: Detection prompt specifying what objects to locate
+    - **→ LLM Agent**: Game understanding context (rules, objectives, visual semantics)
+  - **Example Output**:
+    - To DINO: "Detect: player (red square), exit (green square), surrounding cells (black=wall, white=path)"
+    - To LLM: "Maze game. Red=player, green=exit, black=walls, white=paths. Move with arrow keys."
   
-  **Stage 2 - GroundingDINO: Precise Object Localization**
+  **Agent 2: GroundingDINO Agent (Spatial Localization)**
   - **Input**: 
-    - Screenshot (same as Stage 1)
-    - Detection prompt from Stage 1
-  - **Task**: Locate specific visual elements with precise bounding boxes
-  - **Output**: 
-    - Structured spatial data (e.g., "Player at [0.3, 0.5], Exit at [0.8, 0.9]")
-    - Surrounding context (e.g., "Walls detected at [0.2, 0.5], [0.4, 0.5], Path clear at [0.3, 0.6]")
+    - Screenshot (same as Agent 1)
+    - Detection prompt from VLM Agent
+  - **Output to LLM Agent**: 
+    - Structured spatial data with precise coordinates
+    - Example: "Player: [0.25, 0.40], Exit: [0.75, 0.85], Walls: {UP, LEFT}, Paths: {DOWN, RIGHT}"
   
-  **Stage 3 - LLM (Reasoning): Decision Making**
-  - **Input**: Structured information from Stage 2
-  - **Task**: Strategic reasoning and action planning
-  - **Output**: 
-    - Decision (e.g., "Move DOWN - path is clear, brings player closer to exit")
-    - Executable instruction (e.g., `{"action_type": "hotkey", "action_inputs": {"key": "down"}}`)
+  **Agent 3: LLM Agent (Decision Making)**
+  - **Inputs from**:
+    - **VLM Agent**: Game rules and context understanding
+    - **GroundingDINO Agent**: Precise spatial positions and relationships
+  - **Output**: Executable action instruction
+  - **Example**: `{"action_type": "hotkey", "action_inputs": {"key": "down"}}` based on reasoning: "Exit is DOWN+RIGHT. Both paths clear. Move DOWN first."
 
 - **Concrete Maze Example**:
   
-  **Stage 1 (VLM) analyzes the screenshot:**
-  - "Maze game detected. Red square = player, green square = exit goal, black pixels = impassable walls, white pixels = walkable paths. Player can move in 4 directions (arrow keys)."
-  - Outputs prompt for Stage 2: "Detect: player (red), exit (green), and classify surrounding 8 cells (up, down, left, right, diagonals) as wall (black) or path (white)"
+  **Agent 1 (VLM) processes screenshot:**
+  - To GroundingDINO: "Detect player (red square), exit (green square), and classify 4 adjacent cells as wall (black) or path (white)"
+  - To LLM: "Maze game rules: Red player must reach green exit. Black cells are walls (blocked). White cells are paths (walkable). Use arrow keys to move."
   
-  **Stage 2 (GroundingDINO) detects objects:**
-  - Player position: [0.25, 0.40]
-  - Exit position: [0.75, 0.85]
-  - Surrounding cells analysis:
-    - UP [0.25, 0.35]: BLACK (wall)
-    - DOWN [0.25, 0.45]: WHITE (path)
-    - LEFT [0.20, 0.40]: BLACK (wall)
-    - RIGHT [0.30, 0.40]: WHITE (path)
+  **Agent 2 (GroundingDINO) returns spatial data:**
+  - To LLM: 
+    ```
+    Player: [0.25, 0.40]
+    Exit: [0.75, 0.85]
+    Adjacent cells:
+      UP [0.25, 0.35]: WALL (black)
+      DOWN [0.25, 0.45]: PATH (white)
+      LEFT [0.20, 0.40]: WALL (black)
+      RIGHT [0.30, 0.40]: PATH (white)
+    ```
   
-  **Stage 3 (LLM) makes decision:**
-  - Analysis: "Player at [0.25, 0.40], exit at [0.75, 0.85]. Exit is DOWN and RIGHT. UP blocked by wall, LEFT blocked by wall. DOWN and RIGHT are both open paths."
-  - Decision: "Move DOWN first (gets closer to exit's Y-coordinate)"
-  - Instruction: `{"action_type": "hotkey", "action_inputs": {"key": "down"}}`
+  **Agent 3 (LLM) decides action:**
+  - Receives game rules from VLM + spatial data from DINO
+  - Reasoning: "Player at [0.25, 0.40], exit at [0.75, 0.85]. Exit direction: DOWN and RIGHT. UP/LEFT blocked by walls. DOWN and RIGHT are open."
+  - Decision: "Move DOWN (closer to exit Y-coordinate, path is clear)"
+  - Output: `{"action_type": "hotkey", "action_inputs": {"key": "down"}}`
 
 - **Implementation TODOs**:
-  1. ✅ Stage 1 VLM pipeline: Integrate vision analysis with task understanding (currently uses `analyze_screenshot_with_detection`)
-  2. ⏳ Stage 2 GroundingDINO: Install and configure for precise spatial detection (currently returns empty if not installed)
-  3. ⏳ Stage 3 LLM reasoning: Enhance planner to consume structured spatial data instead of raw text observations
-  4. ⏳ Test end-to-end with maze game and validate each stage's output quality
+  1. ⏳ Create VLM Agent class with dual output (detection prompt + game context)
+  2. ⏳ Create GroundingDINO Agent class (currently just helper function in `object_detector.py`)
+  3. ⏳ Create LLM Agent class that consumes both VLM context and DINO spatial data
+  4. ⏳ Implement agent coordinator/orchestrator to manage the data flow between 3 agents
+  5. ⏳ Test end-to-end with maze game and validate each agent's output quality
 
 ### 5/11/2025
 
@@ -218,4 +223,3 @@
 ### 18/9/2025
 
 - Initialized project
-```
