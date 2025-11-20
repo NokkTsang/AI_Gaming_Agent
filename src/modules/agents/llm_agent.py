@@ -15,6 +15,7 @@ The output is consumed by the UI Automation Executor.
 from typing import Dict, Optional
 import os
 import json
+from openai import RateLimitError, APIError, APIConnectionError
 
 
 class LLMAgent:
@@ -132,6 +133,68 @@ class LLMAgent:
             print(f"  → Reasoning: {result.get('reasoning', '')[:100]}...")
             
             return result
+        
+        except RateLimitError as e:
+            error_msg = (
+                "\n❌ OpenAI API Quota Exceeded\n"
+                "─" * 60 + "\n"
+                "Your OpenAI API account has exceeded its quota.\n\n"
+                "Possible solutions:\n"
+                "  1. Check your billing details at: https://platform.openai.com/account/billing\n"
+                "  2. Add payment method or upgrade your plan\n"
+                "  3. Wait for quota reset (if on free tier)\n"
+                "  4. Use a different API key with available quota\n\n"
+                f"Error details: {str(e)}\n"
+                "─" * 60
+            )
+            print(error_msg)
+            return {
+                'action': None,
+                'reasoning': 'OpenAI API quota exceeded',
+                'confidence': 0.0,
+                'error': 'rate_limit_exceeded'
+            }
+        
+        except APIConnectionError as e:
+            error_msg = (
+                "\n❌ OpenAI API Connection Error\n"
+                "─" * 60 + "\n"
+                "Failed to connect to OpenAI API.\n\n"
+                "Possible solutions:\n"
+                "  1. Check your internet connection\n"
+                "  2. Verify OpenAI API is accessible in your region\n"
+                "  3. Check if you're behind a proxy/firewall\n"
+                "  4. Try again in a few moments\n\n"
+                f"Error details: {str(e)}\n"
+                "─" * 60
+            )
+            print(error_msg)
+            return {
+                'action': None,
+                'reasoning': 'Failed to connect to OpenAI API',
+                'confidence': 0.0,
+                'error': 'connection_error'
+            }
+        
+        except APIError as e:
+            error_msg = (
+                "\n❌ OpenAI API Error\n"
+                "─" * 60 + "\n"
+                f"API Error: {str(e)}\n\n"
+                "Possible solutions:\n"
+                "  1. Verify your API key is valid\n"
+                "  2. Check if the model is available\n"
+                "  3. Review the error message above\n"
+                "  4. Try again in a few moments\n"
+                "─" * 60
+            )
+            print(error_msg)
+            return {
+                'action': None,
+                'reasoning': f'OpenAI API error: {str(e)}',
+                'confidence': 0.0,
+                'error': 'api_error'
+            }
             
         except Exception as e:
             print(f"[LLM Agent] ❌ Decision failed: {e}")

@@ -16,11 +16,12 @@ For automated unit tests:
 import sys
 import unittest
 from pathlib import Path
-from src.modules.agents.dino_agent import DINOAgent
 
 # Add src to path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
+
+from src.modules.agents.dino_agent import DINOAgent
 
 
 class TestDINOAgent(unittest.TestCase):

@@ -168,8 +168,8 @@ def run_manual_test():
     print("=" * 80)
     
     # Check for API key
-    if not os.getenv("OpenAI_API_KEY") and not os.getenv("OPENAI_API_KEY"):
-        print("\n❌ OpenAI API key not set. Please set it first:")
+    if not os.getenv("OPENAI_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+        print("\n❌ OPENAI_API_KEY not set. Please set it first:")
         print("   set OPENAI_API_KEY=your-key-here")
         return
     

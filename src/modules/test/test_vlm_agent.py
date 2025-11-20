@@ -38,9 +38,9 @@ class TestVLMAgent(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures."""
         # Check for API key
-        cls.api_key = os.getenv("OpenAI_API_KEY")
+        cls.api_key = os.getenv("OPENAI_API_KEY")
         if not cls.api_key:
-            raise unittest.SkipTest("OpenAI_API_KEY not set")
+            raise unittest.SkipTest("OPENAI_API_KEY not set")
         
         # Create a test screenshot (simple colored rectangle game-like image)
         cls.test_screenshot = tempfile.NamedTemporaryFile(
@@ -86,9 +86,9 @@ class TestVLMAgent(unittest.TestCase):
     def test_02_agent_initialization_without_api_key(self):
         """Test VLM Agent raises error without API key."""
         # Temporarily remove API key
-        original_key = os.environ.get("OpenAI_API_KEY")
+        original_key = os.environ.get("OPENAI_API_KEY")
         if original_key:
-            del os.environ["OpenAI_API_KEY"]
+            del os.environ["OPENAI_API_KEY"]
         
         with self.assertRaises(ValueError) as context:
             VLMAgent()

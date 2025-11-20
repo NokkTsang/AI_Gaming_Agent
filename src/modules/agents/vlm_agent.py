@@ -9,7 +9,7 @@ Agent 1 in the three-agent architecture:
 
 import os
 from typing import Dict
-from openai import OpenAI
+from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 from PIL import Image
 import base64
 import io
@@ -64,25 +64,86 @@ class VLMAgent:
         # Build analysis prompt
         prompt = self._build_analysis_prompt(task_description)
         
-        # Call vision model
+        # Call vision model with error handling
         print(f"\n[VLM Agent] Analyzing screenshot with {self.model}...")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url, "detail": "high"},
-                        },
-                    ],
-                }
-            ],
-            max_tokens=600,
-            temperature=0.3,
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url, "detail": "high"},
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=600,
+                temperature=0.3,
+            )
+        except RateLimitError as e:
+            error_msg = (
+                "\n❌ OpenAI API Quota Exceeded\n"
+                "─" * 60 + "\n"
+                "Your OpenAI API account has exceeded its quota.\n\n"
+                "Possible solutions:\n"
+                "  1. Check your billing details at: https://platform.openai.com/account/billing\n"
+                "  2. Add payment method or upgrade your plan\n"
+                "  3. Wait for quota reset (if on free tier)\n"
+                "  4. Use a different API key with available quota\n\n"
+                f"Error details: {str(e)}\n"
+                "─" * 60
+            )
+            print(error_msg)
+            raise RuntimeError(
+                "OpenAI API quota exceeded. Please check your billing settings."
+            ) from e
+        except APIConnectionError as e:
+            error_msg = (
+                "\n❌ OpenAI API Connection Error\n"
+                "─" * 60 + "\n"
+                "Failed to connect to OpenAI API.\n\n"
+                "Possible solutions:\n"
+                "  1. Check your internet connection\n"
+                "  2. Verify OpenAI API is accessible in your region\n"
+                "  3. Check if you're behind a proxy/firewall\n"
+                "  4. Try again in a few moments\n\n"
+                f"Error details: {str(e)}\n"
+                "─" * 60
+            )
+            print(error_msg)
+            raise RuntimeError(
+                "Failed to connect to OpenAI API. Check your connection."
+            ) from e
+        except APIError as e:
+            error_msg = (
+                "\n❌ OpenAI API Error\n"
+                "─" * 60 + "\n"
+                f"API Error: {str(e)}\n\n"
+                "Possible solutions:\n"
+                "  1. Verify your API key is valid\n"
+                "  2. Check if the model is available\n"
+                "  3. Review the error message above\n"
+                "  4. Try again in a few moments\n"
+                "─" * 60
+            )
+            print(error_msg)
+            raise RuntimeError(
+                f"OpenAI API error: {str(e)}"
+            ) from e
+        except Exception as e:
+            error_msg = (
+                "\n❌ Unexpected Error\n"
+                "─" * 60 + "\n"
+                f"Error: {str(e)}\n"
+                f"Type: {type(e).__name__}\n"
+                "─" * 60
+            )
+            print(error_msg)
+            raise
         
         raw_response = response.choices[0].message.content.strip()
         

@@ -25,13 +25,13 @@ class DINOAgent:
     text descriptions from the VLM Agent.
     """
     
-    def __init__(self, box_threshold: float = 0.35, text_threshold: float = 0.25):
+    def __init__(self, box_threshold: float = 0.25, text_threshold: float = 0.20):
         """
         Initialize DINO Agent.
         
         Args:
-            box_threshold: Minimum confidence for bounding box detection
-            text_threshold: Minimum confidence for text matching
+            box_threshold: Minimum confidence for bounding box detection (default: 0.25)
+            text_threshold: Minimum confidence for text matching (default: 0.20)
         """
         self.box_threshold = box_threshold
         self.text_threshold = text_threshold
