@@ -43,7 +43,7 @@ class LLMAgent:
         try:
             from openai import OpenAI
             
-            api_key = os.getenv("OpenAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+            api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 print("[LLM Agent] ⚠️  OpenAI API key not found")
                 return

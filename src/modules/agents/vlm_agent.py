@@ -33,9 +33,9 @@ class VLMAgent:
             api_key: OpenAI API key (defaults to env var)
         """
         self.model = model
-        self.api_key = api_key or os.getenv("OpenAI_API_KEY")
+        self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError("OpenAI_API_KEY not found in environment")
+            raise ValueError("OPENAI_API_KEY not found in environment")
         self.client = OpenAI(api_key=self.api_key)
         
     def analyze(self, screenshot_path: str, task_description: str = "") -> Dict[str, str]:
