@@ -13,16 +13,14 @@ For automated unit tests:
     pytest src/modules/test/test_dino_agent.py
 """
 
-import os
 import sys
 import unittest
 from pathlib import Path
+from src.modules.agents.dino_agent import DINOAgent
 
 # Add src to path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
-
-from src.modules.agents.dino_agent import DINOAgent
 
 
 class TestDINOAgent(unittest.TestCase):
@@ -117,7 +115,8 @@ class TestDINOAgent(unittest.TestCase):
         print("\n✓ Test 05: Screenshot size detected correctly")
     
     def test_06_detection_result_format(self):
-        """Test that detection results have correct format when objects found."""
+        """Test that detection results have correct format when objects
+        found."""
         # This test only runs if GroundingDINO is available
         if not self.agent.detector or not self.agent.detector.available:
             print("\n⊘ Test 06: Skipped (GroundingDINO not available)")
@@ -238,7 +237,9 @@ def run_manual_test():
     print("📊 DETECTION RESULTS")
     print("=" * 80)
     
-    print(f"\nScreenshot size: {result['screenshot_size']['width']} x {result['screenshot_size']['height']}")
+    width = result['screenshot_size']['width']
+    height = result['screenshot_size']['height']
+    print(f"\nScreenshot size: {width} x {height}")
     print(f"Total detections: {result['total_detections']}")
     
     if 'error' in result:
@@ -249,10 +250,20 @@ def run_manual_test():
         for idx, obj in enumerate(result['detected_objects'], 1):
             print(f"\n  {idx}. {obj['object'].upper()}")
             print(f"     Confidence: {obj['confidence']:.2%}")
-            print(f"     Position: ({obj['pixel_coords']['x_center']}, {obj['pixel_coords']['y_center']})")
-            print(f"     Size: {obj['pixel_coords']['width']} x {obj['pixel_coords']['height']}")
-            print(f"     Bounding box: ({obj['pixel_coords']['x1']}, {obj['pixel_coords']['y1']}) to ({obj['pixel_coords']['x2']}, {obj['pixel_coords']['y2']})")
-            print(f"     Normalized: ({obj['normalized_coords']['x_center']:.3f}, {obj['normalized_coords']['y_center']:.3f})")
+            x_center = obj['pixel_coords']['x_center']
+            y_center = obj['pixel_coords']['y_center']
+            print(f"     Position: ({x_center}, {y_center})")
+            width = obj['pixel_coords']['width']
+            height = obj['pixel_coords']['height']
+            print(f"     Size: {width} x {height}")
+            x1 = obj['pixel_coords']['x1']
+            y1 = obj['pixel_coords']['y1']
+            x2 = obj['pixel_coords']['x2']
+            y2 = obj['pixel_coords']['y2']
+            print(f"     Bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+            norm_x = obj['normalized_coords']['x_center']
+            norm_y = obj['normalized_coords']['y_center']
+            print(f"     Normalized: ({norm_x:.3f}, {norm_y:.3f})")
     else:
         print("\n✗ No objects detected")
         print("   Try adjusting the prompt or using different thresholds")
@@ -260,7 +271,9 @@ def run_manual_test():
     # Save annotated image
     if result['detected_objects']:
         print("\n📝 Saving annotated image...")
-        annotated_path = agent.annotate_detections(str(screenshot_path), result)
+        annotated_path = agent.annotate_detections(
+            str(screenshot_path), result
+        )
         if annotated_path:
             print(f"   ✓ Saved: {annotated_path}")
     

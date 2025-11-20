@@ -1,5 +1,6 @@
 """
-Window capture test: Lists available windows and allows user to select one to capture,
+Window capture test: Lists available windows and
+allows user to select one to capture,
 or captures fullscreen if no selection is made.
 
 Run from project root:
@@ -9,9 +10,12 @@ Run from project root:
 import os
 import sys
 from datetime import datetime
+from src.modules.screen_input.screen_capture import take_screenshot
 
 # Ensure repo root is on sys.path so `modules.*` imports work when not using -m
-repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+repo_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
@@ -67,7 +71,6 @@ def _enumerate_windows_windows() -> list[tuple[int, str]]:
         return []
 
 
-
 def _enumerate_windows_macos() -> list[tuple[int, str]]:
     """macOS-specific window enumeration."""
     try:
@@ -81,7 +84,9 @@ def _enumerate_windows_macos() -> list[tuple[int, str]]:
             wid = info.get(Quartz.kCGWindowNumber)
             owner = info.get(Quartz.kCGWindowOwnerName, "") or ""
             name = info.get(Quartz.kCGWindowName, "") or ""
-            title = (f"{owner} - {name}" if owner and name else owner or name).strip()
+            title = (
+                f"{owner} - {name}" if owner and name else owner or name
+            ).strip()
             if wid and title:
                 results.append((int(wid), title))
         return results
@@ -117,8 +122,6 @@ def _enumerate_windows_linux() -> list[tuple[str, str]]:
         print(f"! Could not enumerate windows: {e}")
         return []
 
-
-from src.modules.screen_input.screen_capture import take_screenshot
 
 # List available windows
 print("\n🪟 Available windows:")

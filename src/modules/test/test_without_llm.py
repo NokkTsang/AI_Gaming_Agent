@@ -6,7 +6,9 @@ import os
 import sys
 
 # Add repo root to path
-repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+repo_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
@@ -22,8 +24,11 @@ try:
     )
 
     region = get_fullscreen_region()
+    screenshot = take_screenshot(region)
     print("✅ Screen capture functions available")
     print(f"   Screen region: {region}")
+    size = screenshot.size if screenshot else 'None'
+    print(f"   Screenshot captured: {size}")
 except Exception as e:
     print(f"❌ ScreenCapture failed: {e}")
 
@@ -61,7 +66,8 @@ try:
 
     # Check tool availability
     tool_names = [name for name in dir(tools) if not name.startswith("_")]
-    print(f"✅ Available tools ({len(tool_names)}): {', '.join(tool_names[:5])}...")
+    tools_preview = ', '.join(tool_names[:5])
+    print(f"✅ Available tools ({len(tool_names)}): {tools_preview}...")
 
 except Exception as e:
     print(f"❌ UI Automation failed: {e}")
