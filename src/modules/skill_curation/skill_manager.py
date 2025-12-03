@@ -38,16 +38,22 @@ class SkillManager:
             True if sequence should be saved
         """
         # Heuristics for skill-worthiness
-        if len(action_sequence) < 2:
-            # Too simple, single action not worth saving
+        if len(action_sequence) < 3:
+            # Too simple - single actions or pairs not worth saving
+            # This prevents saving trivial skills like "press right arrow"
             return False
 
         if len(action_sequence) > 15:
             # Too complex, might be too specific
             return False
 
-        # Check for repeated patterns (indicates reusability)
-        # For now, accept all sequences of 2-15 actions
+        # Check if all actions are the same type (not useful as a skill)
+        action_types = [a.get("action_type") or a.get("tool") for a in action_sequence]
+        if len(set(action_types)) == 1:
+            # All same action type (e.g., all hotkeys) - not a useful skill
+            return False
+
+        # Check for variety in the sequence (indicates reusability)
         return True
 
     def extract_skill(
@@ -92,13 +98,6 @@ Task: {subtask_description}
 Respond with only the function name, nothing else."""
 
         try:
-            print("\n" + "=" * 80)
-            print("SKILL NAME GENERATION REQUEST")
-            print("=" * 80)
-            print(f"Model: {self.model}")
-            print(f"\nPrompt: {prompt}")
-            print("-" * 80)
-
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -113,13 +112,12 @@ Respond with only the function name, nothing else."""
             )
 
             skill_name = response.choices[0].message.content.strip()
-
-            print(f"\nSKILL NAME GENERATION RESPONSE: {skill_name}")
-            if hasattr(response, "usage") and response.usage:
-                print(
-                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
-                )
-            print("=" * 80 + "\n")
+            tokens = (
+                response.usage.total_tokens
+                if hasattr(response, "usage") and response.usage
+                else "?"
+            )
+            print(f"  [SkillManager] Generated name: {skill_name} | Tokens: {tokens}")
 
             # Clean up name
             skill_name = skill_name.replace(" ", "_").lower()
@@ -157,103 +155,3 @@ Respond with only the function name, nothing else."""
             code_lines.append(f"    {tool_name}({param_str})")
 
         return "\n".join(code_lines)
-
-    def refine_skill_with_llm(
-        self, action_sequence: List[Dict], subtask_description: str
-    ) -> Tuple[str, str, str]:
-        """
-        Use LLM to generate more sophisticated skill code.
-
-        Args:
-            action_sequence: List of action dicts
-            subtask_description: What the sequence accomplished
-
-        Returns:
-            Tuple of (skill_name, skill_description, skill_code)
-        """
-        actions_str = "\n".join(str(a) for a in action_sequence)
-
-        prompt = f"""Convert this action sequence into a reusable Python function.
-
-Task Accomplished: {subtask_description}
-
-Action Sequence:
-{actions_str}
-
-Generate:
-1. A concise snake_case function name
-2. A one-line docstring
-3. Python code that uses the available tools (click_box, type_text, press_key, scroll, wait, etc.)
-
-Format your response as:
-NAME: function_name
-DESCRIPTION: Brief description
-CODE:
-```python
-def function_name():
-    \"\"\"Docstring\"\"\"
-    # code here
-```
-"""
-
-        try:
-            print("\n" + "=" * 80)
-            print("SKILL REFINEMENT REQUEST")
-            print("=" * 80)
-            print(f"Model: {self.model}")
-            print(f"\nPrompt ({len(prompt)} chars):")
-            print("-" * 80)
-            print(prompt)
-            print("-" * 80)
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert at converting action sequences into clean, reusable Python functions.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.4,
-                max_tokens=800,
-            )
-
-            result = response.choices[0].message.content.strip()
-
-            print("\nSKILL REFINEMENT RESPONSE")
-            print("=" * 80)
-            print(result)
-            print("=" * 80)
-            if hasattr(response, "usage") and response.usage:
-                print(
-                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
-                )
-            print("=" * 80 + "\n")
-
-            # Parse response
-            skill_name = "new_skill"
-            skill_description = subtask_description
-            skill_code = self._actions_to_code(action_sequence, "new_skill")
-
-            # Extract NAME
-            if "NAME:" in result:
-                name_line = result.split("NAME:")[1].split("\n")[0].strip()
-                skill_name = name_line
-
-            # Extract DESCRIPTION
-            if "DESCRIPTION:" in result:
-                desc_line = result.split("DESCRIPTION:")[1].split("\n")[0].strip()
-                skill_description = desc_line
-
-            # Extract CODE
-            if "```python" in result:
-                code_block = result.split("```python")[1].split("```")[0].strip()
-                skill_code = code_block
-
-            return skill_name, skill_description, skill_code
-
-        except Exception as e:
-            print(f"LLM skill refinement error: {e}")
-            # Fallback to simple extraction
-            return self.extract_skill(action_sequence, subtask_description, "")

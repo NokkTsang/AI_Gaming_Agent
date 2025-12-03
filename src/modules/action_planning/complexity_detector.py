@@ -72,24 +72,25 @@ class ComplexityDetector:
             return True, "Significant screen change detected (new UI elements)"
 
         # Heuristic 4: Keywords indicating complexity
+        # Note: Removed common words like "or" that appear in normal subtask descriptions
         complex_keywords = [
             "multiple options",
-            "choose",
+            "choose between",
             "decide",
-            "fork",
+            "fork in",
             "junction",
             "new area",
             "different screen",
-            "menu",
-            "selection",
-            "dialog",
-            "which",
-            "or",
-            "strategy",
-            "plan",
+            "menu appeared",
+            "selection required",
+            "dialog box",
+            "which one",
+            "strategy needed",
+            "plan required",
             "puzzle",
-            "error",
-            "warning",
+            "error message",
+            "warning message",
+            "unexpected",
         ]
         if any(kw in current_observation.lower() for kw in complex_keywords):
             keyword = next(
@@ -199,24 +200,3 @@ Answer with ONE word: SIMPLE or COMPLEX"""
         except Exception as e:
             # On error, default to thinking (safe choice)
             return True, f"LLM check failed: {e}, defaulting to deep thinking"
-
-    def get_thinking_stats(self, action_history: List[Dict]) -> Dict:
-        """
-        Get statistics about thinking vs reactive actions.
-
-        Useful for analyzing sparse thinking effectiveness.
-        """
-        if not action_history:
-            return {"total": 0, "thinking": 0, "reactive": 0, "thinking_rate": 0.0}
-
-        thinking_count = sum(1 for a in action_history if a.get("thought"))
-        reactive_count = len(action_history) - thinking_count
-
-        return {
-            "total": len(action_history),
-            "thinking": thinking_count,
-            "reactive": reactive_count,
-            "thinking_rate": (
-                thinking_count / len(action_history) if action_history else 0.0
-            ),
-        }

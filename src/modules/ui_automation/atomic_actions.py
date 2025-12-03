@@ -28,7 +28,7 @@ class UIAutomator:
 
     # ---- Mouse ----
     def move_to(self, x: float, y: float, duration: float = 0.0) -> None:
-        print(f"[DEBUG AUTOMATOR] move_to({x}, {y}, duration={duration})")
+        print(f"  [Automator] move_to({int(x)}, {int(y)})")
         pyautogui.moveTo(x, y, duration=duration)
 
     def click(
@@ -39,32 +39,20 @@ class UIAutomator:
         clicks: int = 1,
         interval: float = 0.1,
     ) -> None:
-        print(
-            f"[DEBUG AUTOMATOR] click({x}, {y}, button='{button}', clicks={clicks}, interval={interval})"
-        )
+        print(f"  [Automator] click({int(x)}, {int(y)}, {button}, clicks={clicks})")
         # First move to ensure we're at the right position
         pyautogui.moveTo(x, y, duration=0.5)
         time.sleep(0.3)  # Wait for hover effects to register
 
-        # Verify position
-        actual_pos = pyautogui.position()
-        print(
-            f"[DEBUG AUTOMATOR] Cursor moved to: {actual_pos}, expected: ({int(x)}, {int(y)})"
-        )
-
         # Focus click first (for browser games/apps that need window focus)
-        print(f"[DEBUG AUTOMATOR] Focus click to activate window")
         pyautogui.click(x, y, button=button)
         time.sleep(0.2)  # Wait for focus to register
 
         # Perform the actual clicks with proper timing
         for i in range(clicks):
-            print(f"[DEBUG AUTOMATOR] Performing click {i+1}/{clicks}")
             # Use mouseDown/Up with longer hold for game compatibility
             pyautogui.mouseDown(button=button)
-            time.sleep(
-                0.2
-            )  # Hold for 200ms to ensure registration (increased from 100ms)
+            time.sleep(0.2)  # Hold for 200ms to ensure registration
             pyautogui.mouseUp(button=button)
             time.sleep(0.1)  # Brief pause after release
 
@@ -72,7 +60,6 @@ class UIAutomator:
                 time.sleep(interval)
 
         time.sleep(0.5)  # Longer wait to ensure click fully processes
-        print(f"[DEBUG AUTOMATOR] click completed")
 
     def double_click(self, x: float, y: float, button: str = "left") -> None:
         pyautogui.doubleClick(x, y, button=button)
@@ -87,10 +74,8 @@ class UIAutomator:
 
     def move(self, x: float, y: float, duration: float = 0.5) -> None:
         """Move cursor smoothly without clicking (for spatial navigation through constrained paths)."""
-        print(f"[DEBUG AUTOMATOR] move({x}, {y}, duration={duration})")
+        print(f"  [Automator] move({int(x)}, {int(y)})")
         pyautogui.moveTo(x, y, duration=duration)
-        actual_pos = pyautogui.position()
-        print(f"[DEBUG AUTOMATOR] Move completed to: {actual_pos}")
 
     # ---- Keyboard ----
     def hotkey(self, *keys: str) -> None:

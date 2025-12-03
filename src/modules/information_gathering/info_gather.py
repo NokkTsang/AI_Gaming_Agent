@@ -1,4 +1,3 @@
-from smolagents import CodeAgent, LiteLLMModel, tool
 from dotenv import load_dotenv
 from typing import Optional, List, Dict, Tuple
 import base64
@@ -6,7 +5,17 @@ import os
 import io
 import glob
 import sys
+import warnings
 from PIL import Image
+
+# Suppress verbose warnings from torch/transformers (they clutter logs)
+warnings.filterwarnings("ignore", message=".*pin_memory.*")
+warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
+warnings.filterwarnings("ignore", message=".*Importing from timm.models.layers.*")
+warnings.filterwarnings("ignore", message=".*device.*argument is deprecated.*")
+warnings.filterwarnings("ignore", message=".*use_reentrant.*")
+warnings.filterwarnings("ignore", message=".*requires_grad=True.*")
+warnings.filterwarnings("ignore", message=".*torch.cuda.amp.autocast.*")
 
 # Load environment variables (expects OPENAI_API_KEY in .env)
 load_dotenv()
@@ -142,6 +151,109 @@ def extract_detection_requests(text: str) -> List[str]:
     return requests
 
 
+def find_text_in_ocr(
+    target_text: str, ocr_results: List[Dict], confidence_threshold: float = 0.8
+) -> Optional[Dict]:
+    """Find target text in OCR results with fuzzy matching.
+
+    Useful for direct OCR-based clicking without LLM.
+
+    Args:
+        target_text: Text to find (e.g., "Sora 2", "Start", "Submit")
+        ocr_results: List of OCR boxes from extract_text_with_ocr()
+        confidence_threshold: Minimum confidence for match (0.0-1.0)
+
+    Returns:
+        Best matching OCR box dict with 'x', 'y', 'text', 'confidence', or None
+    """
+    if not ocr_results or not target_text:
+        return None
+
+    target_lower = target_text.lower().strip()
+    best_match = None
+    best_score = 0.0
+
+    for box in ocr_results:
+        if box["confidence"] < confidence_threshold:
+            continue
+
+        ocr_text_lower = box["text"].lower().strip()
+
+        # Exact match (highest priority)
+        if ocr_text_lower == target_lower:
+            return box
+
+        # Contained match (e.g., target="Start" matches "Start Game")
+        if target_lower in ocr_text_lower or ocr_text_lower in target_lower:
+            score = box["confidence"] * (
+                len(target_lower) / max(len(ocr_text_lower), len(target_lower))
+            )
+            if score > best_score:
+                best_score = score
+                best_match = box
+
+    return best_match
+
+
+def check_ocr_success(
+    target_text: str, ocr_before: List[Dict], ocr_after: List[Dict]
+) -> Tuple[bool, str]:
+    """Check if a click action succeeded by comparing OCR results.
+
+    Success indicators:
+    - Target text position changed significantly
+    - Target text disappeared (navigated away)
+    - New page content appeared
+
+    Args:
+        target_text: The text that was clicked
+        ocr_before: OCR results before click
+        ocr_after: OCR results after click
+
+    Returns:
+        Tuple of (success: bool, reason: str)
+    """
+    if not ocr_before or not ocr_after:
+        return False, "OCR data unavailable"
+
+    # Find target in before/after
+    target_before = find_text_in_ocr(target_text, ocr_before, confidence_threshold=0.5)
+    target_after = find_text_in_ocr(target_text, ocr_after, confidence_threshold=0.5)
+
+    # Case 1: Target disappeared (navigated to new page)
+    if target_before and not target_after:
+        return (
+            True,
+            f"Target '{target_text}' no longer visible (likely navigated to new page)",
+        )
+
+    # Case 2: Target position changed significantly (UI responded)
+    if target_before and target_after:
+        x_diff = abs(target_before["x"] - target_after["x"])
+        y_diff = abs(target_before["y"] - target_after["y"])
+        if x_diff > 0.1 or y_diff > 0.1:
+            return True, f"Target '{target_text}' position changed significantly"
+
+    # Case 3: Check if screen content changed significantly
+    texts_before = set(
+        box["text"].lower() for box in ocr_before if box["confidence"] > 0.5
+    )
+    texts_after = set(
+        box["text"].lower() for box in ocr_after if box["confidence"] > 0.5
+    )
+
+    new_texts = texts_after - texts_before
+    removed_texts = texts_before - texts_after
+
+    if len(new_texts) > 3 or len(removed_texts) > 3:
+        return (
+            True,
+            f"Screen content changed significantly ({len(new_texts)} new, {len(removed_texts)} removed text elements)",
+        )
+
+    return False, "No significant OCR changes detected"
+
+
 # ---- Minimal helper to send an image to an LLM and get feedback ----
 def analyze_screenshot(
     image_path: str,
@@ -199,17 +311,6 @@ def analyze_screenshot(
 
     client = OpenAI(api_key=api_key)
 
-    # Log the prompt being sent
-    print("\n" + "=" * 80)
-    print("VISION API REQUEST")
-    print("=" * 80)
-    print(f"Model: {model}")
-    print(f"Prompt length: {len(enhanced_question)} characters")
-    print("\nPrompt:")
-    print("-" * 80)
-    print(enhanced_question)
-    print("-" * 80)
-
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -227,17 +328,14 @@ def analyze_screenshot(
         max_tokens=400,  # Reduced from 800 - be concise
     )
 
-    # Log the response and token usage
     response_text = response.choices[0].message.content
-    print("\nVISION API RESPONSE")
-    print("=" * 80)
-    print(response_text)
-    print("=" * 80)
+
+    # Log tokens and brief summary
     if hasattr(response, "usage") and response.usage:
         print(
-            f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+            f"     [Vision] Tokens: {response.usage.prompt_tokens}→{response.usage.completion_tokens} ({response.usage.total_tokens} total)"
         )
-    print("=" * 80 + "\n")
+    print(f"     [Vision] Response: {response_text[:100]}...")
 
     return response_text
 
@@ -284,28 +382,28 @@ def analyze_screenshot_with_detection(
         return initial_response
 
     # Phase 2: Run object detection for requested objects
-    print(f"\n   🔍 Vision requested detection for: {detection_requests}")
+    print(f"   [Detection] Requested: {detection_requests}")
 
     all_detections = []
     for obj_name in detection_requests:
         detections = detect_objects_smart(image_path, obj_name)
         if detections:
-            print(f"      ✓ Found {len(detections)} '{obj_name}' objects")
+            print(f"      Found {len(detections)} '{obj_name}' objects")
             all_detections.extend(detections)
         else:
-            print(f"      ✗ No '{obj_name}' objects found")
+            print(f"      No '{obj_name}' objects found")
 
     if not all_detections:
-        print("   ⚠️  No objects detected, using initial analysis")
+        print("   WARNING: No objects detected, using initial analysis")
         return initial_response
 
     # Phase 3: Annotate image with detections
     annotated_path = annotate_detections(image_path, all_detections)
     if not annotated_path:
-        print("   ⚠️  Annotation failed, using initial analysis")
+        print("   WARNING: Annotation failed, using initial analysis")
         return initial_response
 
-    print(f"   ✓ Annotated image with {len(all_detections)} detections")
+    print(f"   Annotated image with {len(all_detections)} detections")
 
     # Phase 4: Re-analyze with annotated image
     detection_summary = "\n\nDETECTED OBJECTS:\n"
@@ -330,72 +428,20 @@ Use these precise coordinates for actions."""
     return final_response
 
 
-# ---- Optional: expose the analyzer as a smolagents Tool ----
-@tool
-def analyze_image_tool(image_path: str, prompt: Optional[str] = None) -> str:
-    """Analyze a screenshot with a vision LLM and return concise feedback.
-
-    Args:
-        image_path (str): Absolute or relative path to a local JPG/PNG image.
-        prompt (str, optional): Custom instruction for the analysis. If None, a default prompt is used.
-
-    Returns:
-        str: Concise textual feedback from the model.
-    """
-    question = (
-        prompt or "Describe the screenshot briefly and list 3-5 salient UI elements."
-    )
-    return analyze_screenshot(image_path=image_path, question=question)
-
-
-# ---- Create a smolagents CodeAgent that can use the tool if desired ----
-def build_agent() -> CodeAgent:
-    api_key = os.getenv("OPENAI_API_KEY")
-    # Use a lightweight text model for tool orchestration; the tool itself calls the vision model.
-    model = LiteLLMModel(model_id="openai/gpt-4.1-nano", api_key=api_key)
-    return CodeAgent(tools=[analyze_image_tool], model=model, add_base_tools=True)
-
-
-def _latest_screenshot(
-    default_dir: str = "src/modules/screen_input/screenshots",
-) -> Optional[str]:
-    """Return the newest jpg/png in default_dir, if any.
-
-    Args:
-        default_dir (str): Directory to search for screenshots.
-
-    Returns:
-        Optional[str]: Path to newest screenshot or None if none found.
-    """
-    paths = glob.glob(os.path.join(default_dir, "*.jpg")) + glob.glob(
-        os.path.join(default_dir, "*.png")
-    )
-    return max(paths, key=os.path.getmtime) if paths else None
-
-
 if __name__ == "__main__":
-    # Usage:
-    # python -m src.modules.information_gathering.info_gather /path/to/image.jpg "optional prompt"
-    # or just run without args to auto-pick the latest screenshot from src/screen_input/screenshots
-
-    img_path = sys.argv[1] if len(sys.argv) >= 2 else _latest_screenshot()
-    prompt = (
-        sys.argv[2]
-        if len(sys.argv) >= 3
-        else "Describe the screenshot briefly and list 3-5 salient UI elements."
-    )
-
-    if not img_path or not os.path.exists(img_path):
-        raise SystemExit(
-            "No image provided and no screenshots found. Pass an image path as the first argument, "
-            "or save one under src/modules/screen_input/screenshots."
+    # Usage: python -m src.modules.information_gathering.info_gather /path/to/image.jpg "optional prompt"
+    if len(sys.argv) < 2:
+        print(
+            "Usage: python -m src.modules.information_gathering.info_gather <image_path> [prompt]"
         )
+        sys.exit(1)
 
-    # Option A: Call the helper directly (fast path)
+    img_path = sys.argv[1]
+    prompt = sys.argv[2] if len(sys.argv) >= 3 else "Describe the screenshot briefly."
+
+    if not os.path.exists(img_path):
+        print(f"Image not found: {img_path}")
+        sys.exit(1)
+
     feedback = analyze_screenshot(image_path=img_path, question=prompt)
-    print("Feedback (direct):\n", feedback)
-
-    # Option B: Let smolagents orchestrate tool usage (optional)
-    # agent = build_agent()
-    # result = agent.run(f"Use analyze_image_tool on '{img_path}'. {prompt}")
-    # print("\nFeedback (via agent):\n", result)
+    print("Feedback:\n", feedback)

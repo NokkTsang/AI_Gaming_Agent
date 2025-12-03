@@ -87,9 +87,6 @@ class ActionExecutor:
         action_type = action.get("action_type")
         inputs = action.get("action_inputs", {})
 
-        # DEBUG: Log action details
-        print(f"[DEBUG EXECUTOR] action_type='{action_type}', inputs={inputs}")
-
         if action_type in {
             "click",
             "left_single",
@@ -99,27 +96,24 @@ class ActionExecutor:
             "right_single",
         }:
             start_box = inputs.get("start_box")
-            print(f"[DEBUG EXECUTOR] start_box={start_box}")
             if start_box:
                 box = self._coerce_box(start_box)
                 cx, cy = _center_of_box(box)
                 x, y = self._denorm(cx, cy)
-                print(f"[DEBUG EXECUTOR] Calculated coordinates: x={x}, y={y}")
                 if action_type in {"click", "left_single"}:
-                    print(f"[DEBUG EXECUTOR] Executing CLICK at ({x}, {y})")
+                    print(f"  → Executing: CLICK at ({int(x)}, {int(y)})")
                     self.automator.click(x, y, button="left")
-                    print(f"[DEBUG EXECUTOR] Click completed")
                 elif action_type == "left_double":
-                    print(f"[DEBUG EXECUTOR] Executing DOUBLE-CLICK")
+                    print(f"  → Executing: DOUBLE-CLICK at ({int(x)}, {int(y)})")
                     self.automator.double_click(x, y, button="left")
                 elif action_type == "right_single":
-                    print(f"[DEBUG EXECUTOR] Executing RIGHT-CLICK")
+                    print(f"  → Executing: RIGHT-CLICK at ({int(x)}, {int(y)})")
                     self.automator.right_click(x, y)
                 elif action_type in {"move"}:
-                    print(f"[DEBUG EXECUTOR] Executing MOVE (smooth) to ({x}, {y})")
+                    print(f"  → Executing: MOVE to ({int(x)}, {int(y)})")
                     self.automator.move(x, y, duration=0.5)
                 else:
-                    print(f"[DEBUG EXECUTOR] Executing HOVER to ({x}, {y})")
+                    print(f"  → Executing: HOVER at ({int(x)}, {int(y)})")
                     self.automator.move_to(x, y)
 
         elif action_type in {"drag", "select"}:
@@ -145,6 +139,15 @@ class ActionExecutor:
         elif action_type in {"hotkey"}:
             hotkey = inputs.get("key") or inputs.get("hotkey") or ""
             if hotkey:
+                # Click center of screen first to ensure window focus (general-purpose fix)
+                # This handles cases where keyboard input goes to wrong window
+                center_x = self.screen_left + self.screen_width / 2
+                center_y = self.screen_top + self.screen_height / 2
+                self.automator.click(center_x, center_y, button="left", clicks=1)
+                import time
+
+                time.sleep(0.1)  # Brief pause after focus click
+
                 keys = [self._key(k) for k in hotkey.split()]
                 self.automator.hotkey(*keys)
 

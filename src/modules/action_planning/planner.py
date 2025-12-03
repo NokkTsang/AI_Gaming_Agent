@@ -26,60 +26,35 @@ class ActionPlanner:
         self.structured_instruction = None  # Will be set by main.py after clarification
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt that defines the agent\'s action space."""
-        return """You are a GUI automation agent. Decide the next action based on task and screen observation.
+        """Build the system prompt that defines the agent's action space (compressed for token efficiency)."""
+        return """GUI automation agent. Actions (normalized [0,1] coords, [0,0]=top-left):
+- click/double_click/right_click(start_box=[x,y])
+- drag(start_box=[x1,y1], end_box=[x2,y2])
+- type(content="text") - \\n for Enter
+- hotkey(key="cmd c") - space-separated, arrows: "up"/"down"/"left"/"right"
+- scroll(direction="up"/"down", start_box=[x,y])
+- move(start_box=[x,y]) - smooth cursor movement
+- wait() - 5 second pause
+- finished(content="summary") - task complete
 
-## Actions
-1. click(start_box=[x, y]) - Click at normalized [0,1] coordinates
-2. double_click(start_box=[x, y])
-3. right_click(start_box=[x, y])
-4. drag(start_box=[x1, y1], end_box=[x2, y2])
-5. type(content="text") - Use \\n for Enter
-6. hotkey(key="cmd c") - Space-separated keys. Arrow keys: "up", "down", "left", "right"
-7. scroll(direction="up"/"down", start_box=[x, y])
-8. wait() - Wait 5 seconds
-9. move(start_box=[x, y]) - Smooth cursor movement (for spatial constraints)
-10. finished(content="summary") - Task complete
+Rules:
+- Use OCR coordinates for text elements
+- For games: batch 3-5 arrow keys in sequence
+- If "CLICK FAILED" with coordinates → use those exact coords
+- After 2+ failed clicks: try type/hotkey/different position
+- Never repeat same failed action >2 times
 
-## Coordinates
-Normalized [0,1]: [0,0]=top-left, [1,1]=bottom-right, [0.5,0.5]=center
-
-## Spatial Navigation
-For obstacles/walls: Use move (not click) with small steps through safe zones.
-
-## Action Batching for Games
-For keyboard-based games (arrow keys, WASD): Return 3-5 actions in sequence to reduce delays.
-Example: Moving through maze → plan multiple arrow key presses toward goal.
-
-## Correction Feedback
-If "CLICK FAILED" with "COORDINATES: [x, y]" → USE those EXACT coordinates (vision analysis correction)
-
-## Failure Recovery (after 2+ failed clicks)
-1. Try typing (element may be focused)
-2. Try hotkeys (cmd+l, tab, enter, etc.)
-3. Try different interaction (double-click, different position)
-4. Skip after 3 failed attempts
-
-NEVER repeat same failed action >2 times.
-
-## Output
-Valid JSON only:
-Single action: {"thought": "reasoning", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.8]}}
-Multiple actions: {"thought": "reasoning", "actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}]}
-
-## Examples
-Click: {"thought": "Clicking START button", "action_type": "click", "action_inputs": {"start_box": [0.5, 0.72]}}
-Arrow key: {"thought": "Moving player up", "action_type": "hotkey", "action_inputs": {"key": "up"}}
-Arrow sequence: {"thought": "Moving toward goal: up 3x then right 2x", "actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}]}
-Hotkey combo: {"thought": "Copy text", "action_type": "hotkey", "action_inputs": {"key": "cmd c"}}
-Move: {"thought": "Moving cursor through maze path", "action_type": "move", "action_inputs": {"start_box": [0.3, 0.5]}}
-Finished: {"thought": "Game loaded successfully", "action_type": "finished", "action_inputs": {"content": "Started Kingdom Rush"}}
-
-Return JSON only, no markdown.
+Output JSON only:
+{"thought":"reason", "action_type":"click", "action_inputs":{"start_box":[0.5,0.8]}}
+Or multi: {"thought":"reason", "actions":[{"action_type":"hotkey", "action_inputs":{"key":"up"}}, ...]}
 """
 
     def plan_next_action(
-        self, task: str, observation: str, action_history: List[Dict[str, Any]]
+        self,
+        task: str,
+        observation: str,
+        action_history: List[Dict[str, Any]],
+        relevant_skills: List[Dict] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Plan the next action based on task, current observation, and history.
@@ -88,12 +63,16 @@ Return JSON only, no markdown.
             task: The overall goal/task to accomplish
             observation: Current screen description from vision LLM
             action_history: List of previous actions taken
+            relevant_skills: List of relevant skill dicts from memory (optional)
 
         Returns:
-            Action dictionary with \'action_type\' and \'action_inputs\', or None if failed
+            Action dictionary with 'action_type' and 'action_inputs', or None if failed
         """
         # Format action history for context
         history_str = self._format_history(action_history)
+
+        # Format relevant skills if provided
+        skills_str = self._format_skills(relevant_skills) if relevant_skills else ""
 
         user_prompt = f"""**Task**: {task}
 
@@ -102,27 +81,13 @@ Return JSON only, no markdown.
 
 **Action History**:
 {history_str}
-
+{skills_str}
 Based on the current screen and task, what should be the next action? Return JSON only."""
 
         # Build system prompt with structured instruction if available
         system_prompt = self._get_augmented_system_prompt()
 
         try:
-            # Log the planning request
-            print("\n" + "=" * 80)
-            print("ACTION PLANNER REQUEST")
-            print("=" * 80)
-            print(f"Model: {self.model}")
-            print(f"\nSystem Prompt ({len(system_prompt)} chars):")
-            print("-" * 80)
-            print(system_prompt)
-            print("-" * 80)
-            print(f"\nUser Prompt ({len(user_prompt)} chars):")
-            print("-" * 80)
-            print(user_prompt)
-            print("-" * 80)
-
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -135,16 +100,11 @@ Based on the current screen and task, what should be the next action? Return JSO
 
             response_text = response.choices[0].message.content.strip()
 
-            # Log the response and token usage
-            print("\nACTION PLANNER RESPONSE")
-            print("=" * 80)
-            print(response_text)
-            print("=" * 80)
+            # Log tokens
             if hasattr(response, "usage") and response.usage:
                 print(
-                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
+                    f"     [Planner] Tokens: {response.usage.prompt_tokens}→{response.usage.completion_tokens} ({response.usage.total_tokens} total)"
                 )
-            print("=" * 80 + "\n")
 
             # Parse the JSON response
             action_dict = self._parse_response(response_text)
@@ -162,7 +122,11 @@ Based on the current screen and task, what should be the next action? Return JSO
             return None
 
     def plan_reactive_action(
-        self, task: str, observation: str, action_history: List[Dict[str, Any]]
+        self,
+        task: str,
+        observation: str,
+        action_history: List[Dict[str, Any]],
+        relevant_skills: List[Dict] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Plan action WITHOUT deep reasoning (reactive/fast mode).
@@ -174,6 +138,7 @@ Based on the current screen and task, what should be the next action? Return JSO
             task: The overall goal/task to accomplish
             observation: Current screen description (reused from last step)
             action_history: List of previous actions taken
+            relevant_skills: List of relevant skill dicts from memory (optional)
 
         Returns:
             Action dictionary WITHOUT 'thought' field (reactive action)
@@ -181,13 +146,19 @@ Based on the current screen and task, what should be the next action? Return JSO
         # Format action history for context
         history_str = self._format_history(action_history)
 
+        # Format skills if provided (brief version for reactive mode)
+        skills_hint = ""
+        if relevant_skills:
+            skill_names = [s.get("skill_name", "?") for s in relevant_skills[:2]]
+            skills_hint = f"\n(Available skills: {', '.join(skill_names)})"
+
         user_prompt = f"""**Task**: {task}
 
 **Current State**:
 {observation[:300]}...
 
 **Recent Actions**:
-{history_str}
+{history_str}{skills_hint}
 
 Continue the task with the NEXT OBVIOUS ACTION. This is a simple continuation - no deep reasoning needed.
 
@@ -195,12 +166,6 @@ Return JSON action only (NO thought field):
 {{"action_type": "...", "action_inputs": {{...}}}}"""
 
         try:
-            # Log the planning request (abbreviated)
-            print("\n" + "=" * 80)
-            print("REACTIVE PLANNER (Fast Mode)")
-            print("=" * 80)
-            print(f"Model: {self.model} | Mode: Action-only (no reasoning)")
-
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -213,11 +178,9 @@ Return JSON action only (NO thought field):
 
             response_text = response.choices[0].message.content.strip()
 
-            # Log the response
-            print(f"Response: {response_text[:150]}")
+            # Log tokens
             if hasattr(response, "usage") and response.usage:
-                print(f"Tokens: {response.usage.total_tokens}")
-            print("=" * 80 + "\n")
+                print(f"     [Reactive] Tokens: {response.usage.total_tokens}")
 
             # Parse the JSON response
             action_dict = self._parse_response(response_text)
@@ -269,31 +232,12 @@ Return JSON action only (NO thought field):
 
     def _build_reactive_system_prompt(self) -> str:
         """Build system prompt for reactive (action-only) planning."""
-        return """You are a fast reactive agent. Generate the NEXT OBVIOUS ACTION without reasoning.
+        return """Fast reactive agent. Generate NEXT OBVIOUS ACTION without reasoning.
+Continue current pattern. NO thought field. Trust recent history.
 
-## Actions (same as normal mode)
-1. click(start_box=[x, y])
-2. double_click(start_box=[x, y])
-3. right_click(start_box=[x, y])
-4. drag(start_box=[x1, y1], end_box=[x2, y2])
-5. type(content="text")
-6. hotkey(key="...") - Arrow keys: "up", "down", "left", "right"
-7. scroll(direction="up"/"down", start_box=[x, y])
-8. wait()
-9. move(start_box=[x, y])
-10. finished(content="summary")
-
-## Reactive Mode Rules
-- Continue current pattern/direction
-- NO reasoning or explanation
-- Fast, predictable actions
-- Trust recent action history
-
-## Output Format
-Single action (NO thought): {"action_type": "hotkey", "action_inputs": {"key": "up"}}
-Action sequence (NO thought): {"actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}, {"action_type": "hotkey", "action_inputs": {"key": "right"}}]}
-
-Return JSON only, no markdown, NO thought field."""
+Output JSON only (NO thought):
+{"action_type": "hotkey", "action_inputs": {"key": "up"}}
+Or sequence: {"actions": [{"action_type": "hotkey", "action_inputs": {"key": "up"}}]}"""
 
     def _parse_response(self, response_text: str) -> Optional[Dict[str, Any]]:
         """Parse LLM response into action dictionary or action sequence."""
@@ -348,5 +292,25 @@ Return JSON only, no markdown, NO thought field."""
             action_type = action.get("action_type", "unknown")
             inputs = action.get("action_inputs", {})
             lines.append(f"{i}. {action_type}({inputs})")
+
+        return "\n".join(lines)
+
+    def _format_skills(self, skills: List[Dict]) -> str:
+        """Format relevant skills into prompt context."""
+        if not skills:
+            return ""
+
+        lines = ["\n**Relevant Skills from Memory** (reuse if applicable):"]
+        for skill in skills[:3]:  # Limit to top 3 to save tokens
+            name = skill.get("skill_name", "unknown")
+            desc = skill.get("description", "")
+            # Extract action pattern from code (simplified)
+            code = skill.get("code", "")
+            # Find action types in code
+            import re
+
+            actions = re.findall(r"action_type='(\w+)'", code)
+            action_pattern = ", ".join(actions[:5]) if actions else "N/A"
+            lines.append(f"  - {name}: {desc[:80]}... [Actions: {action_pattern}]")
 
         return "\n".join(lines)

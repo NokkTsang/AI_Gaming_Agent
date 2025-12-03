@@ -23,6 +23,9 @@ from modules.screen_input.screen_capture import take_screenshot
 from modules.information_gathering.info_gather import (
     analyze_screenshot,
     analyze_screenshot_with_detection,
+    extract_text_with_ocr,
+    find_text_in_ocr,
+    check_ocr_success,
 )
 from modules.action_planning.planner import ActionPlanner
 from modules.ui_automation.executor import ActionExecutor
@@ -201,7 +204,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         # Action planner
         self.planner = ActionPlanner(model=model, api_key=api_key)
 
-        print("✓ Agent initialized successfully!")
+        print("Agent initialized successfully")
         print("  - Two-tier memory: 80 full + 2400 compressed steps")
         print("  - Sparse thinking: Reactive mode for simple actions")
         print("  - Task clarification: Structured instructions")
@@ -220,7 +223,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         self.executor.screen_width = int(screen_region[2])
         self.executor.screen_height = int(screen_region[3])
         print(
-            f"[DEBUG] Screen region updated: offset=({screen_region[0]}, {screen_region[1]}), size={screen_region[2]}x{screen_region[3]}"
+            f"  Screen region: offset=({screen_region[0]}, {screen_region[1]}), size={screen_region[2]}x{screen_region[3]}"
         )
 
     def compare_screenshots(
@@ -260,6 +263,122 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
         except Exception as e:
             print(f"   Warning: Screenshot comparison failed: {e}")
             return True  # Assume change occurred if comparison fails
+
+    def compare_screenshots_with_vlm(
+        self, img1_path: str, img2_path: str, task_context: str = ""
+    ) -> Tuple[bool, str]:
+        """Compare two screenshots using VLM to detect meaningful changes.
+
+        Unlike pixel comparison, this understands game context and can detect
+        subtle but important changes (e.g., player moved one cell in maze).
+
+        Args:
+            img1_path: Path to first (before) screenshot
+            img2_path: Path to second (after) screenshot
+            task_context: Optional context about the current task
+
+        Returns:
+            Tuple of (changed: bool, description: str)
+        """
+        try:
+            from openai import OpenAI
+            from PIL import Image
+            import base64
+            import io
+
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return True, "API key not available, assuming change"
+
+            client = OpenAI(api_key=api_key)
+
+            # Load and resize both images
+            def encode_image(path):
+                img = Image.open(path).convert("RGB")
+                # Resize to reduce tokens
+                max_edge = 512
+                ratio = max_edge / max(img.size)
+                if ratio < 1:
+                    img = img.resize(
+                        (int(img.size[0] * ratio), int(img.size[1] * ratio)),
+                        Image.LANCZOS,
+                    )
+                buffered = io.BytesIO()
+                img.save(buffered, format="JPEG", quality=70)
+                return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+            img1_b64 = encode_image(img1_path)
+            img2_b64 = encode_image(img2_path)
+
+            prompt = f"""Compare these two game screenshots (BEFORE and AFTER an action).
+
+Task context: {task_context if task_context else 'Playing a game'}
+
+Determine if MEANINGFUL PROGRESS occurred. Look for:
+- Player/character position changed
+- Game state changed (score, health, items)
+- UI elements changed (menus, dialogs)
+- Any visual indication the action had an effect
+
+Respond in this exact format:
+CHANGED: YES or NO
+DESCRIPTION: Brief description of what changed (or "No meaningful change detected")"""
+
+            response = client.chat.completions.create(
+                model=self.model,  # Use configured model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "text",
+                                "text": "BEFORE (first image):",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img1_b64}",
+                                    "detail": "low",
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": "AFTER (second image):",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img2_b64}",
+                                    "detail": "low",
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=100,
+                temperature=0.1,
+            )
+
+            result = response.choices[0].message.content.strip()
+
+            # Log token usage
+            if hasattr(response, "usage") and response.usage:
+                print(f"     [VLM Compare] Tokens: {response.usage.total_tokens}")
+
+            # Parse response
+            changed = "CHANGED: YES" in result.upper()
+            description = (
+                result.split("DESCRIPTION:")[-1].strip()
+                if "DESCRIPTION:" in result
+                else result
+            )
+
+            return changed, description
+
+        except Exception as e:
+            print(f"   Warning: VLM comparison failed: {e}")
+            return True, f"Comparison failed: {e}"  # Assume change on error
 
     def run(
         self,
@@ -338,7 +457,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
             # Step 2: Decompose task into subtasks
             print("Step 2: Breaking down task into subtasks...")
             subtasks = self.task_breaker.decompose_task(task, initial_observation)
-            print(f"  ✓ Generated {len(subtasks)} subtasks:")
+            print(f"  Generated {len(subtasks)} subtasks:")
             for i, st in enumerate(subtasks, 1):
                 print(f"    {i}. {st}")
             print()
@@ -353,7 +472,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 action={"action_type": "observe", "action_inputs": {}},
             )
             print(
-                f"  ✓ Memory: {self.short_term.max_context_steps} full + {self.short_term.max_summary_steps} compressed"
+                f"  Memory: {self.short_term.max_context_steps} full + {self.short_term.max_summary_steps} compressed"
             )
             print()
 
@@ -391,7 +510,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Get current subtask
                 current_subtask = self.short_term.get_current_subtask()
                 if current_subtask is None:
-                    print("\n✓ All subtasks completed!")
+                    print("\nAll subtasks completed!")
                     break
 
                 print(f"Current subtask: {current_subtask}\n")
@@ -404,7 +523,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Skip subtask if exceeded max attempts
                 if subtask_attempts[current_subtask] > self.max_subtask_attempts:
                     print(
-                        f"  ⚠️ Subtask failed after {self.max_subtask_attempts} attempts, skipping to next subtask"
+                        f"  WARNING: Subtask failed after {self.max_subtask_attempts} attempts, skipping to next"
                     )
                     print(f"     Failed subtask: {current_subtask}\n")
 
@@ -421,7 +540,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Warn if approaching limit
                 if subtask_attempts[current_subtask] == self.max_subtask_attempts:
                     print(
-                        f"  ⚠️ WARNING: Last attempt for this subtask (attempt {subtask_attempts[current_subtask]}/{self.max_subtask_attempts})"
+                        f"  WARNING: Last attempt for this subtask (attempt {subtask_attempts[current_subtask]}/{self.max_subtask_attempts})"
                     )
                     print("  If this fails, subtask will be skipped\n")
 
@@ -435,7 +554,18 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 relevant_skill_ids = self.skill_retrieval.retrieve_relevant_skills(
                     current_subtask, top_k=3
                 )
-                print(f"  ✓ Retrieved {len(relevant_skill_ids)} skills\n")
+                # Get full skill details for passing to planner
+                relevant_skills = []
+                for skill_id in relevant_skill_ids:
+                    skill = self.long_term.get_skill(skill_id)
+                    if skill:
+                        relevant_skills.append(skill)
+                if relevant_skills:
+                    print(
+                        f"  Retrieved {len(relevant_skills)} skills: {[s['skill_name'] for s in relevant_skills]}"
+                    )
+                else:
+                    print(f"  No relevant skills found")
 
                 # Get recent context
                 context = self.short_term.get_recent_context(n=3)
@@ -481,11 +611,12 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 planning_start = time.time()
 
                 if needs_thinking:
-                    # Deep planning: Full reasoning + action
+                    # Deep planning: Full reasoning + action (with skill context)
                     action_dict = self.planner.plan_next_action(
                         task=current_subtask,
                         observation=current_observation,
                         action_history=context["recent_actions"],
+                        relevant_skills=relevant_skills,
                     )
                     thinking_count += 1
                 else:
@@ -494,6 +625,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                         task=current_subtask,
                         observation=current_observation,
                         action_history=context["recent_actions"],
+                        relevant_skills=relevant_skills,
                     )
                     reactive_count += 1
 
@@ -501,10 +633,10 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 step_timings["planning"].append(planning_time)
 
                 if action_dict is None:
-                    print("  ⨯ Failed to generate action")
+                    print("  FAILED: Could not generate action")
                     consecutive_failures += 1
                     if consecutive_failures >= max_failures:
-                        print("\n⨯ Too many failures. Stopping.")
+                        print("\nFAILED: Too many failures. Stopping.")
                         break
                     continue
 
@@ -546,25 +678,31 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                         step_timings["completion_check"].append(completion_time)
 
                         if allow_finish:
-                            print(f"  ✓ {completion_reason}")
-                            print("✓ Task completed!")
+                            print(f"  OK: {completion_reason}")
+                            print("Task completed!")
                             break
                         else:
-                            print(f"  ✗ {completion_reason}")
-                            print(
-                                "  ⚠️  Rejected premature completion - continuing task"
-                            )
+                            print(f"  REJECTED: {completion_reason}")
+                            print("  Rejected premature completion - continuing task")
                             # Don't execute the finished action, continue instead
                             consecutive_failures += 1
                             continue
                     else:
                         # No instruction available, trust agent's judgment
-                        print("✓ Task completed!")
+                        print("Task completed!")
                         break
 
                 # Record observation and screenshot before actions
                 observation_before = current_observation
                 screenshot_before = screenshot_path
+
+                # Capture OCR before action for later comparison (token-free success detection)
+                ocr_before = None
+                if self.enable_ocr:
+                    try:
+                        ocr_before = extract_text_with_ocr(screenshot_before)
+                    except Exception:
+                        ocr_before = None
 
                 # Step 6: Execute actions
                 print("  Executing action(s)...")
@@ -583,15 +721,15 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     step_timings["execution"].append(execution_time)
                     if len(actions_to_execute) > 1:
                         print(
-                            f"  ✓ {executed_count} actions executed [took {execution_time:.2f}s]\n"
+                            f"  {executed_count} actions executed [{execution_time:.2f}s]\n"
                         )
                     else:
-                        print(f"  ✓ Action executed [took {execution_time:.2f}s]\n")
+                        print(f"  Action executed [{execution_time:.2f}s]\n")
                 except Exception as e:
                     execution_time = time.time() - execution_start
                     step_timings["execution"].append(execution_time)
                     print(
-                        f"  ⨯ Execution failed after {executed_count} actions: {e} [took {execution_time:.2f}s]\n"
+                        f"  FAILED: Execution failed after {executed_count} actions: {e} [{execution_time:.2f}s]\n"
                     )
                     consecutive_failures += 1
                     if consecutive_failures >= max_failures:
@@ -609,6 +747,14 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     focus_window=True,
                     monitor_index=self.monitor_index,
                 )
+
+                # Capture OCR after action for comparison
+                ocr_after = None
+                if self.enable_ocr and ocr_before is not None:
+                    try:
+                        ocr_after = extract_text_with_ocr(screenshot_after)
+                    except Exception:
+                        ocr_after = None
 
                 # Update screen size if region changed (shouldn't happen, but defensive)
                 if screen_region_after != screen_region:
@@ -709,20 +855,43 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Performance optimization: Skip vision analysis if screen unchanged
                 vision_start = time.time()
 
-                # Check if screen changed using pixel diff
-                # Use different thresholds: 0.001 (0.1%) for keyboard actions, 0.002 (0.2%) for clicks
+                # Check if screen changed using pixel diff first (fast check)
                 last_action_type = (
                     actions_to_execute[-1].get("action_type")
                     if actions_to_execute
                     else None
                 )
                 threshold = 0.001 if last_action_type in ["hotkey", "type"] else 0.002
-                screen_changed_final = self.compare_screenshots(
+                pixel_changed = self.compare_screenshots(
                     screenshot_before, screenshot_after, threshold=threshold
                 )
 
+                # If pixel comparison says unchanged, use VLM to verify
+                # This prevents false "stuck" detection when meaningful game progress occurred
+                screen_changed_final = pixel_changed
+                vlm_change_description = ""
+
+                if not pixel_changed and step > 0:
+                    # Double-check with VLM - it understands game context
+                    print(
+                        f"  Pixel diff below {threshold*100:.1f}%, verifying with VLM..."
+                    )
+                    screen_changed_final, vlm_change_description = (
+                        self.compare_screenshots_with_vlm(
+                            screenshot_before,
+                            screenshot_after,
+                            task_context=current_subtask,
+                        )
+                    )
+                    if screen_changed_final:
+                        print(
+                            f"  VLM detected change: {vlm_change_description[:80]}..."
+                        )
+                    else:
+                        print(f"  VLM confirmed: No meaningful change")
+
                 if not screen_changed_final and step > 0:
-                    # Screen unchanged - reuse previous observation, skip expensive vision call
+                    # Screen truly unchanged - reuse previous observation, skip expensive vision call
                     observation_after = observation_before
                     vision_time = time.time() - vision_start
                     step_timings["vision"].append(vision_time)
@@ -733,14 +902,20 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     observation_history.append(observation_after)
 
                     print(
-                        f"  Screen unchanged [threshold={threshold*100:.1f}%], reusing observation [saved ~40s]\n"
+                        f"  Screen unchanged (confirmed by VLM), reusing observation\n"
                     )
                 else:
                     # Screen changed or first iteration - run full vision analysis
+                    # Include VLM change description if available for better context
+                    change_hint = ""
+                    if vlm_change_description:
+                        change_hint = f"\n\nVLM detected: {vlm_change_description}\n"
+
                     observation_prompt = (
                         self.vision_system_prompt
-                        + f"\n\nPrevious state: {observation_before[:100]}...\n"
-                        + "Describe what changed after the action."
+                        + f"\n\nPrevious state: {observation_before[:100]}..."
+                        + change_hint
+                        + "\nDescribe the current game state and any changes after the action."
                     )
                     observation_after = analyze_screenshot_with_detection(
                         screenshot_after,
@@ -764,30 +939,103 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                 # Reset consecutive failures on successful action
                 consecutive_failures = 0
 
-                # Step 8: Self-reflection
-                print("  Reflecting on outcome...")
-                reflection_start = time.time()
-
-                # Format action_taken string for reflection
-                if len(actions_to_execute) > 1:
-                    action_strs = [
-                        f"{a['action_type']}({a['action_inputs']})"
-                        for a in actions_to_execute
-                    ]
-                    action_taken = f"Action sequence: {', '.join(action_strs)}"
-                else:
-                    action = actions_to_execute[0]
-                    action_taken = f"{action['action_type']}({action['action_inputs']})"
-
-                success, reasoning = self.reflector.judge_action_success(
-                    task_goal=task,
-                    current_subtask=current_subtask,
-                    action_taken=action_taken,
-                    observation_before=observation_before,
-                    observation_after=observation_after,
+                # Step 8: Self-reflection (with smart skipping to save tokens)
+                # Determine if we should skip reflection
+                last_action_type = (
+                    actions_to_execute[-1].get("action_type")
+                    if actions_to_execute
+                    else None
                 )
-                reflection_time = time.time() - reflection_start
-                step_timings["reflection"].append(reflection_time)
+                skip_reflection_actions = ["move", "wait", "scroll", "SCAN_SCREEN"]
+
+                # Skip reflection for: positioning actions, or when observation was reused (identical before/after)
+                should_skip_reflection = (
+                    last_action_type in skip_reflection_actions
+                    or (
+                        not screen_changed_final
+                        and observation_before == observation_after
+                    )
+                )
+
+                if should_skip_reflection:
+                    # Auto-success for positioning actions or unchanged screens
+                    if last_action_type in skip_reflection_actions:
+                        success = True
+                        reasoning = f"{last_action_type} action completed (no state change expected)"
+                        print(
+                            f"  Skipped reflection for '{last_action_type}' [saved tokens]"
+                        )
+                    else:
+                        # Screen unchanged - mark as success to avoid false failures
+                        success = True
+                        reasoning = "Screen unchanged, continuing (skipped reflection to save tokens)"
+                        print(
+                            f"  Skipped reflection (observation reused) [saved tokens]"
+                        )
+                    reflection_time = 0.0
+                    step_timings["reflection"].append(reflection_time)
+                else:
+                    # Try OCR-based success detection first (no LLM tokens needed)
+                    ocr_success = False
+                    ocr_reasoning = ""
+
+                    if (
+                        last_action_type in ["click", "double_click", "right_click"]
+                        and ocr_before
+                        and ocr_after
+                    ):
+                        # Extract target text from subtask or thought for OCR comparison
+                        import re
+
+                        target_text = None
+                        # Look for quoted text in subtask (e.g., "click 'Sora 2'")
+                        quoted_match = re.search(
+                            r"['\"]([^'\"]+)['\"]", current_subtask
+                        )
+                        if quoted_match:
+                            target_text = quoted_match.group(1)
+
+                        if target_text:
+                            ocr_success, ocr_reasoning = check_ocr_success(
+                                target_text, ocr_before, ocr_after
+                            )
+                            if ocr_success:
+                                print(
+                                    f"  OCR-based success: {ocr_reasoning} [saved tokens]"
+                                )
+
+                    if ocr_success:
+                        success = True
+                        reasoning = ocr_reasoning
+                        reflection_time = 0.0
+                        step_timings["reflection"].append(reflection_time)
+                    else:
+                        # Full LLM reflection for meaningful state changes
+                        print("  Reflecting on outcome...")
+                        reflection_start = time.time()
+
+                        # Format action_taken string for reflection
+                        if len(actions_to_execute) > 1:
+                            action_strs = [
+                                f"{a['action_type']}({a['action_inputs']})"
+                                for a in actions_to_execute
+                            ]
+                            action_taken = f"Action sequence: {', '.join(action_strs)}"
+                        else:
+                            action = actions_to_execute[0]
+                            action_taken = (
+                                f"{action['action_type']}({action['action_inputs']})"
+                            )
+
+                        success, reasoning = self.reflector.judge_action_success(
+                            task_goal=task,
+                            current_subtask=current_subtask,
+                            action_taken=action_taken,
+                            observation_before=observation_before,
+                            observation_after=observation_after,
+                        )
+                        reflection_time = time.time() - reflection_start
+                        step_timings["reflection"].append(reflection_time)
 
                 # Step 8.5: Check for stuck state with recovery (Game-TARS enhancement)
                 if len(self.short_term.state["actions"]) >= 5:
@@ -803,7 +1051,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                     stuck_time = time.time() - stuck_start
 
                     if is_stuck:
-                        print(f"  ⚠️  STUCK DETECTED: {stuck_reason}")
+                        print(f"  STUCK DETECTED: {stuck_reason}")
                         print(
                             f"  Attempting recovery: {len(recovery_actions)} action(s)"
                         )
@@ -817,21 +1065,15 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                                 self.executor.execute(recovery_action)
                                 time.sleep(0.5)
                             except Exception as e:
-                                print(f"    ⨯ Recovery action failed: {e}")
+                                print(f"    Recovery action failed: {e}")
 
-                        print(
-                            f"  ✓ Recovery attempted [check took {stuck_time:.2f}s]\n"
-                        )
+                        print(f"  Recovery attempted [{stuck_time:.2f}s]\n")
                         consecutive_failures = 0  # Reset after recovery attempt
                     else:
-                        print(
-                            f"  ✓ No stuck pattern detected [check took {stuck_time:.2f}s]"
-                        )
+                        print(f"  No stuck pattern [{stuck_time:.2f}s]")
 
                 if success:
-                    print(
-                        f"  ✓ Success: {reasoning} [reflection took {reflection_time:.2f}s]\n"
-                    )
+                    print(f"  Success: {reasoning} [{reflection_time:.2f}s]\n")
                     consecutive_failures = 0
 
                     # Advance to next subtask
@@ -856,7 +1098,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
                         if is_complete:
                             print(
-                                f"  ✓ Task goal verified as complete! [check took {completion_time:.2f}s]"
+                                f"  Task goal verified as complete! [{completion_time:.2f}s]"
                             )
                             break
                         else:
@@ -870,10 +1112,10 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                             )
                             self.short_term.update_subtasks(new_subtasks)
 
-                    elif len(remaining_subtasks) <= 2:
-                        # Near completion - proactively check if goal already achieved
+                    elif len(remaining_subtasks) == 1:
+                        # Only check when on LAST subtask (saves API calls)
                         print(
-                            "  Near completion. Checking if task goal is already achieved..."
+                            "  Final subtask. Checking if task goal is already achieved..."
                         )
                         completion_start = time.time()
                         is_complete = self.task_breaker.check_task_completion(
@@ -884,7 +1126,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
 
                         if is_complete:
                             print(
-                                f"  ✓ Task goal achieved early! [check took {completion_time:.2f}s]"
+                                f"  Task goal achieved early! [{completion_time:.2f}s]"
                             )
                             break
                         else:
@@ -912,10 +1154,10 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                                 skill_code=skill_code,
                                 task_context=task,
                             )
-                            print(f"  ✓ Saved skill: {skill_name} (ID: {skill_id})")
+                            print(f"  Saved skill: {skill_name} (ID: {skill_id})")
                             self.skill_retrieval.rebuild_embeddings()
                 else:
-                    print(f"  ⨯ Failed: {reasoning}\n")
+                    print(f"  Failed: {reasoning}\n")
                     consecutive_failures += 1
 
                     if consecutive_failures >= max_failures:
@@ -930,7 +1172,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
                             current_observation=observation_after,
                             completed_subtasks=completed,
                         )
-                        print(f"  ✓ New plan with {len(new_subtasks)} subtasks")
+                        print(f"  New plan with {len(new_subtasks)} subtasks")
                         self.short_term.update_subtasks(new_subtasks)
                         consecutive_failures = 0
 
@@ -1046,7 +1288,7 @@ Use OCR coordinates for text. Request detection for visual elements. Be concise.
             print("\n\n! Agent interrupted by user")
             print(f"Log saved to: {self.logger.get_log_path()}")
         except Exception as e:
-            print(f"\n\n⨯ Agent error: {e}")
+            print(f"\n\nERROR: Agent error: {e}")
             print(f"Log saved to: {self.logger.get_log_path()}")
             import traceback
 
@@ -1061,7 +1303,7 @@ def main():
     load_dotenv()
 
     if not os.getenv("OPENAI_API_KEY"):
-        print("⨯ Error: OPENAI_API_KEY not found in environment")
+        print("ERROR: OPENAI_API_KEY not found in environment")
         print("Please set it in .env file or export it")
         sys.exit(1)
 
@@ -1078,11 +1320,11 @@ def main():
     # CONFIGURATION: Edit these values to customize the agent
     # ============================================================
     WINDOW_TITLE = None  # Set to None to list windows, or "Your Game" to auto-select
-    MODEL = "gpt-4.1-nano"
+    MODEL = "qwen3-vl-plus"
     MAX_STEPS = 50
     MAX_SUBTASK_ATTEMPTS = 3
-    ENABLE_OCR = True
-    ENABLE_GROUNDING_DINO = True
+    ENABLE_OCR = False
+    ENABLE_GROUNDING_DINO = False
     ENABLE_SPARSE_THINKING = True  # 3-4x speedup (recommended)
     ENABLE_CLARIFICATION = True  # Task Q&A (optional)
     # ============================================================

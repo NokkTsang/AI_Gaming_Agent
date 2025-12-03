@@ -6,6 +6,16 @@ Zero-shot detection with text prompts - works on any game or app without trainin
 from typing import List, Dict, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 import os
+import warnings
+
+# Suppress verbose warnings from torch/transformers (they clutter logs)
+warnings.filterwarnings("ignore", message=".*pin_memory.*")
+warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
+warnings.filterwarnings("ignore", message=".*Importing from timm.models.layers.*")
+warnings.filterwarnings("ignore", message=".*device.*argument is deprecated.*")
+warnings.filterwarnings("ignore", message=".*use_reentrant.*")
+warnings.filterwarnings("ignore", message=".*requires_grad=True.*")
+warnings.filterwarnings("ignore", message=".*torch.cuda.amp.autocast.*")
 
 
 # ============================================================================
@@ -44,7 +54,7 @@ class GroundingDINODetector:
             self.predict = predict
             self.device = "cpu"
             self.available = True
-            print(f"   ✓ GroundingDINO loaded (device: cpu)")
+            print(f"   GroundingDINO loaded (device: cpu)")
 
         except ImportError:
             print("   GroundingDINO not installed (pip install groundingdino-py)")
@@ -135,14 +145,14 @@ def detect_objects_smart(
     """
     detector = get_detector()
     if not detector.available:
-        print(f"   ⚠️  Object detection disabled (GroundingDINO not available)")
+        print(f"   Object detection disabled (GroundingDINO not available)")
         return []
 
     results = detector.detect(image_path, text_prompt, confidence_threshold)
     if results:
-        print(f"   ✓ Found {len(results)} objects matching '{text_prompt}'")
+        print(f"   Found {len(results)} objects matching '{text_prompt}'")
     else:
-        print(f"   ✗ No objects found matching '{text_prompt}'")
+        print(f"   No objects found matching '{text_prompt}'")
 
     return results
 
@@ -239,6 +249,6 @@ if __name__ == "__main__":
         # Annotate image
         annotated = annotate_detections(image_path, objects)
         if annotated:
-            print(f"\n✓ Annotated image saved: {annotated}")
+            print(f"\nAnnotated image saved: {annotated}")
     else:
         print("No objects detected")

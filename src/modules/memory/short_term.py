@@ -139,27 +139,10 @@ class TaskState:
         self._save_state()
 
     def add_observation(self, observation: str):
-        """
-        Add new observation (legacy method for compatibility).
-
-        Note: For Game-TARS memory, use add_step() instead.
-        """
+        """Add observation note (used for warnings/skips, not full steps)."""
         self.state["observations"].append(
             {"timestamp": datetime.now().isoformat(), "content": observation}
         )
-        self.state["last_update"] = datetime.now().isoformat()
-        self._save_state()
-
-    def add_action(self, action: Dict):
-        """
-        Add executed action (legacy method for compatibility).
-
-        Note: For Game-TARS memory, use add_step() instead.
-        """
-        self.state["actions"].append(
-            {"timestamp": datetime.now().isoformat(), "action": action}
-        )
-        self.state["last_update"] = datetime.now().isoformat()
         self._save_state()
 
     def get_current_subtask(self) -> Optional[str]:

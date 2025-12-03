@@ -122,7 +122,7 @@ Be CONSERVATIVE - only mark complete if you're confident ALL criteria are met.""
 
             # If low confidence, ask user for confirmation
             if is_complete and confidence < confidence_threshold:
-                print(f"\n⚠️  Uncertain if task complete (confidence: {confidence:.0%})")
+                print(f"\nUncertain if task complete (confidence: {confidence:.0%})")
                 print(f"   Reasoning: {reasoning}")
                 print(f"   Met criteria: {result.get('met_criteria', [])}")
                 print(f"   Unmet criteria: {result.get('unmet_criteria', [])}")
@@ -207,28 +207,3 @@ Be CONSERVATIVE - only mark complete if you're confident ALL criteria are met.""
                 False,
                 f"Task not complete: {reasoning} (confidence: {confidence:.0%})",
             )
-
-    def format_completion_report(
-        self, instruction: Dict, is_complete: bool, reasoning: str, confidence: float
-    ) -> str:
-        """
-        Format completion status report for logging.
-        """
-        status = "✓ COMPLETE" if is_complete else "✗ INCOMPLETE"
-        lines = [
-            "=" * 80,
-            "TASK COMPLETION STATUS",
-            "=" * 80,
-            f"\nStatus: {status}",
-            f"Confidence: {confidence:.0%}",
-            f"Reasoning: {reasoning}",
-            f"\nGoal: {instruction.get('goal', 'Unknown')}",
-        ]
-
-        if not is_complete:
-            lines.append("\nRemaining criteria:")
-            for criterion in instruction.get("success_criteria", []):
-                lines.append(f"  • {criterion}")
-
-        lines.append("=" * 80)
-        return "\n".join(lines)

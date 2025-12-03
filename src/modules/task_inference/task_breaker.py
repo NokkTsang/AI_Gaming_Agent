@@ -66,15 +66,6 @@ BAD examples (too vague):
 Respond with a numbered list of ACTION-ORIENTED subtasks, one per line."""
 
         try:
-            print("\n" + "=" * 80)
-            print("TASK DECOMPOSITION REQUEST")
-            print("=" * 80)
-            print(f"Model: {self.model}")
-            print(f"\nPrompt ({len(prompt)} chars):")
-            print("-" * 80)
-            print(prompt)
-            print("-" * 80)
-
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -90,15 +81,15 @@ Respond with a numbered list of ACTION-ORIENTED subtasks, one per line."""
 
             result_text = response.choices[0].message.content.strip()
 
-            print("\nTASK DECOMPOSITION RESPONSE")
-            print("=" * 80)
-            print(result_text)
-            print("=" * 80)
-            if hasattr(response, "usage") and response.usage:
-                print(
-                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
-                )
-            print("=" * 80 + "\n")
+            # Log summary
+            tokens = (
+                f"{response.usage.total_tokens}"
+                if hasattr(response, "usage") and response.usage
+                else "?"
+            )
+            print(
+                f"  [TaskBreaker] Model={self.model} | Tokens={tokens} | Subtasks generated"
+            )
 
             # Parse numbered list
             subtasks = []
@@ -138,7 +129,7 @@ Respond with a numbered list of ACTION-ORIENTED subtasks, one per line."""
         Returns:
             New list of remaining subtasks
         """
-        completed_str = "\n".join(f"✓ {s}" for s in completed_subtasks)
+        completed_str = "\n".join(f"[DONE] {s}" for s in completed_subtasks)
 
         prompt = f"""You are a task planning expert. A subtask has failed and you need to adjust the plan.
 
@@ -162,15 +153,6 @@ Generate a new plan for the remaining subtasks. Consider:
 Respond with a numbered list of NEW subtasks to complete the task."""
 
         try:
-            print("\n" + "=" * 80)
-            print("TASK REPLANNING REQUEST")
-            print("=" * 80)
-            print(f"Model: {self.model}")
-            print(f"\nPrompt ({len(prompt)} chars):")
-            print("-" * 80)
-            print(prompt)
-            print("-" * 80)
-
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -186,15 +168,13 @@ Respond with a numbered list of NEW subtasks to complete the task."""
 
             result_text = response.choices[0].message.content.strip()
 
-            print("\nTASK REPLANNING RESPONSE")
-            print("=" * 80)
-            print(result_text)
-            print("=" * 80)
-            if hasattr(response, "usage") and response.usage:
-                print(
-                    f"Tokens - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}"
-                )
-            print("=" * 80 + "\n")
+            # Log summary
+            tokens = (
+                f"{response.usage.total_tokens}"
+                if hasattr(response, "usage") and response.usage
+                else "?"
+            )
+            print(f"  [TaskBreaker] Replanning | Model={self.model} | Tokens={tokens}")
 
             # Parse numbered list
             subtasks = []

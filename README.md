@@ -1,11 +1,12 @@
-# AI Gaming Agent 🤖 + 🎮
+# AI Gaming Agent
 
-The project aims to apply a comprehensive AI gaming agent framework built on top of **smolagents** to create intelligent agents capable of playing and mastering various types of games, from simple board games to complex universal gaming environments.
+A general-purpose GUI automation agent capable of playing games and automating desktop tasks. Uses vision LLMs to understand screen content and execute actions.
 
 ## Technology Stack
 
-- [SmolAgents](https://github.com/huggingface/smolagents): A lightweight framework for building AI agents.
-- [Cradle](https://github.com/BAAI-Agents/Cradle): A framework which attempts at General Computer Control (GCC).
+- [Cradle](https://github.com/BAAI-Agents/Cradle): Architecture reference for General Computer Control (GCC)
+- [Game-TARS](https://github.com/BAAI-Agents/Game-TARS): Memory and sparse thinking optimizations
+- Supports OpenAI, Qwen (DashScope), and other OpenAI-compatible APIs
 
 ## Environment Installation
 
@@ -68,26 +69,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    export OPENAI_API_KEY='your-api-key'
    ```
 
-5. Running Tests
-   Without LLM (basic module tests):
-
-   ```
-   python -m src.modules.test.test_without_llm
-   ```
-
-   With LLM (requires API key):
-
-   ```
-   python -m src.modules.test.test_modules
-   ```
-
-   Check the window capture:
-
-   ```
-   python -m src.modules.test.test_window_capture [optional_window_title]
-   ```
-
-6. Usage
+5. Usage
 
    **Quick Start (Recommended):**
 
@@ -174,7 +156,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    - `MONITOR_INDEX`: 0=all, 1=primary, 2=secondary, etc.
    - Window mode automatically detects which monitor contains the window
 
-7. View logs and tokens
+6. View logs and tokens
 
    All terminal output is automatically saved to timestamped log files. Logs include full prompts, responses, and token usage for all LLM calls.
 
@@ -188,7 +170,7 @@ It is suggested to use a remote virtual environment for environment configuratio
    python src/modules/memory/task_log/analyze_tokens.py
    ```
 
-8. Reset memory
+7. Reset memory
 
    Linux/macOS:
 
@@ -217,20 +199,15 @@ It is suggested to use a remote virtual environment for environment configuratio
    del src\modules\memory\task_log\*.log
    ```
 
-## 📖 Documentation
+## Documentation
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed agent architecture (reference from Cradle)
-- **[.azure/README.md](.azure/README.md)**: Game-TARS adaptation guide (NEW!)
-  - Memory architecture improvements (20 steps → 2480 steps)
-  - Sparse thinking for speed (45s → 12s per action)
-  - Task clarification for accuracy (60% → 95%)
-  - Implementation roadmap and research contributions
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Agent architecture (Cradle-inspired)
 
 ## Agent Architecture
 
-The architecture is reference from [Cradle](https://github.com/BAAI-Agents/Cradle). Please read [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+Reference: [Cradle](https://github.com/BAAI-Agents/Cradle). See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
-**🚀 NEW: Game-TARS Adaptation** - See [.azure/README.md](.azure/README.md) for comprehensive analysis of adapting Game-TARS insights to this API-based agent. Includes:
+**Game-TARS Features Implemented:**
 
 - Two-tier memory system (124x longer context)
 - Sparse thinking (3.8x faster gameplay)

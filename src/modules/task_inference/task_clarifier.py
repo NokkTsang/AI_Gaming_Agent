@@ -64,17 +64,14 @@ class TaskClarifier:
         Returns:
             Structured instruction dict with goal, constraints, success criteria
         """
-        print("\n" + "=" * 80)
-        print("TASK CLARIFICATION (Game-TARS Instruction Following)")
-        print("=" * 80)
-        print(f'Original task: "{user_task}"')
+        print(f'\n  [TaskClarifier] Processing task: "{user_task[:50]}..."')
 
         # Step 1: Analyze task and create structured instruction
         instruction = self._analyze_task(user_task, initial_observation)
 
         # Step 2: If ambiguities exist, ask user
         if instruction.get("ambiguities") and instruction["ambiguities"]:
-            print("\n⚠️  Task has ambiguities that need clarification:")
+            print("\nTask has ambiguities that need clarification:")
             print("-" * 80)
 
             clarifications = {}
@@ -110,7 +107,7 @@ class TaskClarifier:
                         answer = question.get("default", "No answer provided")
 
                 clarifications[f"q{i}"] = answer
-                print(f"   ✓ Recorded: {answer}")
+                print(f"   Recorded: {answer}")
 
             # Step 3: Refine instruction with answers
             instruction = self._refine_with_answers(
@@ -119,30 +116,15 @@ class TaskClarifier:
             print("\n" + "-" * 80)
         else:
             if auto_accept_unambiguous:
-                print("✓ Task is unambiguous, proceeding with generated instruction")
+                print("Task is unambiguous, proceeding with generated instruction")
             else:
-                print("\n✓ No ambiguities detected")
+                print("\nNo ambiguities detected")
 
-        # Display final instruction
-        print("\n" + "=" * 80)
-        print("STRUCTURED INSTRUCTION")
-        print("=" * 80)
-        print(f"\n📋 GOAL:\n   {instruction['goal']}")
-        print(f"\n🎮 ACTION SPACE:")
-        for action in instruction["action_space"][:5]:  # Show first 5
-            print(f"   • {action}")
-        if len(instruction["action_space"]) > 5:
-            print(f"   ... and {len(instruction['action_space']) - 5} more")
-        print(f"\n⚠️  CONSTRAINTS:")
-        for constraint in instruction["constraints"]:
-            print(f"   • {constraint}")
-        print(f"\n✓ SUCCESS CRITERIA:")
-        for criterion in instruction["success_criteria"]:
-            print(f"   • {criterion}")
-        print(f"\n✗ FAILURE CONDITIONS:")
-        for condition in instruction["failure_conditions"]:
-            print(f"   • {condition}")
-        print("=" * 80 + "\n")
+        # Display final instruction summary
+        print(f"  Goal: {instruction['goal'][:60]}...")
+        print(
+            f"    Actions: {len(instruction['action_space'])} | Constraints: {len(instruction['constraints'])} | Success criteria: {len(instruction['success_criteria'])}"
+        )
 
         return instruction
 
@@ -287,31 +269,3 @@ Return JSON only."""
             if "ambiguities" in instruction:
                 del instruction["ambiguities"]
             return instruction
-
-    def format_instruction_for_prompt(self, instruction: Dict) -> str:
-        """
-        Format instruction as text for including in agent prompts.
-        """
-        lines = [
-            "=== TASK INSTRUCTION ===",
-            f"\nGOAL: {instruction['goal']}",
-            "\nACTION SPACE:",
-        ]
-        for action in instruction.get("action_space", []):
-            lines.append(f"  • {action}")
-
-        lines.append("\nCONSTRAINTS:")
-        for constraint in instruction.get("constraints", []):
-            lines.append(f"  • {constraint}")
-
-        lines.append("\nSUCCESS CRITERIA:")
-        for criterion in instruction.get("success_criteria", []):
-            lines.append(f"  • {criterion}")
-
-        lines.append("\nFAILURE CONDITIONS:")
-        for condition in instruction.get("failure_conditions", []):
-            lines.append(f"  • {condition}")
-
-        lines.append("\n" + "=" * 80)
-
-        return "\n".join(lines)

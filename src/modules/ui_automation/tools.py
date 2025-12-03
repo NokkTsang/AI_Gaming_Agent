@@ -251,32 +251,3 @@ def wait(seconds: float = 1.0) -> str:
         sec = POLICY_MAX_WAIT_SECONDS
     _AUTOMATOR.wait(sec)
     return f"waited {sec}s"
-
-
-try:
-    import pygetwindow as gw  # optional
-
-    @tool
-    def focus_window(title_substring: str) -> str:
-        """Bring the first window whose title contains the substring to the foreground.
-
-        Args:
-            title_substring: Partial window title to search for (case-insensitive).
-
-        Returns:
-            Status string indicating success or 'not found' if window not found.
-        """
-        windows = [
-            w for w in gw.getAllWindows() if title_substring.lower() in w.title.lower()
-        ]
-        if not windows:
-            return "not found"
-        w = windows[0]
-        if w.isMinimized:
-            w.restore()
-        w.activate()
-        return f"focused: {w.title}"
-
-except Exception:
-    # Optional dependency not available; tool won't be registered
-    pass

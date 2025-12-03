@@ -1,7 +1,25 @@
+### 3/12/2025
+
+- **Bug Fixes**:
+  - Fixed hardcoded model bug (line 328 was using "gpt-4o-mini" instead of configured model)
+  - Fixed stuck recovery logic to use backtracking (opposite direction) instead of random unused direction
+  - Auto-focus before keyboard input: clicks center of screen before hotkey to ensure correct window has focus
+- **Code Cleanup**:
+  - Removed ~275 lines of unused code across 9 files
+  - Moved three-agent architecture to `src/backup_three_agent/` (standalone tools)
+  - Deleted empty `utils/` folder and test scripts
+- **Optimizations**:
+  - Skill saving now requires 3+ varied actions (prevents trivial single-action skills)
+  - Sparse thinking keywords refined (removed common false-positives like "or")
+  - Completion checks reduced to final subtask only (was last 2)
+- **Qwen Support**: Tested with `qwen3-vl-plus` via DashScope API
+
 ### 19/11/2025
+
 - **Three-Agent Architecture Implementation Complete**:
-  
+
   **Agent 1: VLM Agent** (`src/modules/agents/vlm_agent.py`)
+
   - Analyzes screenshots
   - Produces dual outputs in a single API call:
     - `detection_prompt`: Object detection instructions for GroundingDINO Agent
@@ -9,8 +27,9 @@
   - Test file: `src/modules/test/test_vlm_agent.py`
   - ✅ **Test Status**: All tests passing, correct outputs verified
   - Example: Maze game → detection_prompt: "player, walls, goal", game_context: "Navigate red square to green goal, avoid black walls"
-  
+
   **Agent 2: GroundingDINO Agent** (`src/modules/agents/dino_agent.py`)
+
   - Zero-shot object detection based on text prompts from VLM Agent
   - Uses existing `object_detector.py` infrastructure
   - Outputs structured spatial data: examples: bounding boxes, pixel coordinates, confidence scores
@@ -18,8 +37,9 @@
   - ⚠️ **Test Status**: Structure tests passing, but GroundingDINO detection not fully tested
     - Agent gracefully falls back to empty detections when model unavailable
     - Mock detector available for testing agent logic without model
-  
+
   **Agent 3: LLM Agent** (`src/modules/agents/llm_agent.py`)
+
   - Decision-making agent
   - Inputs: game_context (from VLM) + spatial_data (from DINO)
   - Outputs: action (JSON), reasoning (text, for debug), confidence (0-1, for debug)
@@ -32,7 +52,6 @@
   - Interactive manual tests allow custom inputs (screenshot paths, prompts, JSON data)
   - Unit tests validate output structure and error handling
   - Mock data provided: `src/modules/test/mock_agent3_input.json` (sample maze scenario)
-  
 - **TODO**:
   1. ⏳ **Complete GroundingDINO Testing**: Download model checkpoint file and verify actual object detection works correctly with real game screenshots
   2. ⏳ **Integrate 3-Agent Architecture into Main**: Replace current `analyze_screenshot_with_detection()` + `ActionPlanner` pipeline with the new 3-agent workflow
@@ -41,9 +60,11 @@
      - Maintain compatibility with existing features (completion detection, stuck detection, etc.)
 
 ### 13/11/2025
+
 - **Three-Agent Architecture** (VLM → DINO → LLM):
-  
+
   **Agent 1: VLM Agent (Vision-Language Model)**
+
   - **Input**: Screenshot
   - **Outputs to**:
     - **→ GroundingDINO Agent**: Detection prompt specifying what objects to locate
@@ -51,16 +72,18 @@
   - **Example Output**:
     - To DINO: "Detect: player (red square), exit (green square), surrounding cells (black=wall, white=path)"
     - To LLM: "Maze game. Red=player, green=exit, black=walls, white=paths. Move with arrow keys."
-  
+
   **Agent 2: GroundingDINO Agent (Spatial Localization)**
-  - **Input**: 
+
+  - **Input**:
     - Screenshot (same as Agent 1)
     - Detection prompt from VLM Agent
-  - **Output to LLM Agent**: 
+  - **Output to LLM Agent**:
     - Structured spatial data with precise coordinates
     - Example: "Player: [0.25, 0.40], Exit: [0.75, 0.85], Walls: {UP, LEFT}, Paths: {DOWN, RIGHT}"
-  
+
   **Agent 3: LLM Agent (Decision Making)**
+
   - **Inputs from**:
     - **VLM Agent**: Game rules and context understanding
     - **GroundingDINO Agent**: Precise spatial positions and relationships
@@ -68,13 +91,15 @@
   - **Example**: `{"action_type": "hotkey", "action_inputs": {"key": "down"}}` based on reasoning: "Exit is DOWN+RIGHT. Both paths clear. Move DOWN first."
 
 - **Concrete Maze Example**:
-  
+
   **Agent 1 (VLM) processes screenshot:**
+
   - To GroundingDINO: "Detect player (red square), exit (green square), and classify 4 adjacent cells as wall (black) or path (white)"
   - To LLM: "Maze game rules: Red player must reach green exit. Black cells are walls (blocked). White cells are paths (walkable). Use arrow keys to move."
-  
+
   **Agent 2 (GroundingDINO) returns spatial data:**
-  - To LLM: 
+
+  - To LLM:
     ```
     Player: [0.25, 0.40]
     Exit: [0.75, 0.85]
@@ -84,8 +109,9 @@
       LEFT [0.20, 0.40]: WALL (black)
       RIGHT [0.30, 0.40]: PATH (white)
     ```
-  
+
   **Agent 3 (LLM) decides action:**
+
   - Receives game rules from VLM + spatial data from DINO
   - Reasoning: "Player at [0.25, 0.40], exit at [0.75, 0.85]. Exit direction: DOWN and RIGHT. UP/LEFT blocked by walls. DOWN and RIGHT are open."
   - Decision: "Move DOWN (closer to exit Y-coordinate, path is clear)"
